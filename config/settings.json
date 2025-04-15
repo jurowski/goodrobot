@@ -1,0 +1,38 @@
+{
+    "wake_word": "jarvis",
+    "wake_word_sensitivity": 0.7,
+    "picovoice_access_key": "",
+    "whisper_api_key": "",
+    "tts_engine": "local",
+    "data_dir": "data",
+    "add_sample_data": false,
+    "audio": {
+        "sample_rate": 16000,
+        "chunk_size": 1024,
+        "channels": 1,
+        "format": "paInt16"
+    },
+    "speech_recognition": {
+        "local_confidence_threshold": 0.8,
+        "timeout": 10,
+        "silence_threshold": 500,
+        "silence_duration": 1.5
+    },
+    "notebook_llm": {
+        "vector_dimension": 768,
+        "similarity_threshold": 0.7,
+        "max_context_items": 10,
+        "memory_decay_rate": 0.95
+    },
+    "prioritization": {
+        "update_interval": 300,
+        "max_suggestions": 5,
+        "min_confidence": 0.6
+    },
+    "logging": {
+        "level": "INFO",
+        "file": "data/logs/voice_assistant.log",
+        "max_size": 10485760,
+        "backup_count": 5
+    }
+}

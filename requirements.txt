@@ -1,0 +1,23 @@
+# Core dependencies
+numpy>=1.26.0
+pandas>=2.1.0
+pydantic>=2.4.2
+requests>=2.31.0
+
+# Voice processing
+SpeechRecognition>=3.10.0
+pvporcupine>=2.2.1  # Wake word detection
+pyaudio>=0.2.13     # Audio processing
+
+# Knowledge repository
+faiss-cpu>=1.7.4    # Vector search
+sentence-transformers>=2.2.2  # Text embeddings
+langchain>=0.0.267  # LLM framework
+
+# Machine learning
+scikit-learn>=1.3.0
+torch>=2.0.1
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0

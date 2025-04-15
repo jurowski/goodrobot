@@ -1,0 +1,38 @@
+# Existing entries...
+
+# docs-site specific
+docs-site/node_modules/
+docs-site/.next/
+docs-site/out/
+docs-site/.env*
+docs-site/*.log
+docs-site/build/
+docs-site/.vercel
+docs-site/coverage/
+docs-site/.DS_Store
+docs-site/*.pem
+
+# Large binary files
+*.node
+
+# Python virtual environment
+venv/
+env/
+.env/
+.venv/
+ENV/
+*.pyc
+__pycache__/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.pytest_cache/
+.env

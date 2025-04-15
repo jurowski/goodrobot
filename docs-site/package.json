@@ -1,0 +1,32 @@
+{
+  "name": "docs-site",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "process-docs": "ts-node scripts/process-documentation.ts",
+    "generate-references": "ts-node scripts/generate-paper-references.ts",
+    "update-docs": "ts-node scripts/update-documentation.ts",
+    "update-docs-enhanced": "ts-node scripts/update-documentation-enhanced.ts",
+    "update-docs-v2": "ts-node scripts/update-documentation-v2.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "dependencies": {
+    "@types/prismjs": "^1.26.5",
+    "next": "latest",
+    "prismjs": "^1.30.0",
+    "react": "latest",
+    "react-dom": "latest",
+    "axios": "^1.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.1",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "typescript": "latest"
+  }
+}

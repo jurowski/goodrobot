@@ -1,0 +1,21 @@
+# Playwright specific
+**/test-results/
+**/playwright-report/
+**/.playwright/
+**/.cache/
+**/.auth/
+**/blob-report/
+**/.trace/
+**/*-snapshots/
+**/*.png
+**/*.webm
+
+# Test artifacts
+**/test-artifacts/
+**/screenshots/
+**/videos/
+**/traces/
+
+# Playwright browsers
+**/playwright/.cache/
+**/.playwright-browsers/

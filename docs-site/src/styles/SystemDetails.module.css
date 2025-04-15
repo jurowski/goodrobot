@@ -1,0 +1,40 @@
+.relatedHeuristics {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.relatedHeuristics h4 {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.relatedHeuristic {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.relatedHeuristic h5 {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #1a1a1a;
+}
+
+.relatedHeuristic p {
+  margin: 0.25rem 0;
+  font-size: 0.75rem;
+  color: #4a5568;
+}
+
+.systemTag {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background-color: #e9ecef;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  color: #495057;
+} 
