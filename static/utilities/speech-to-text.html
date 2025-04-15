@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Speech to Text Testing Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #statusIndicator {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        #statusIndicator.recording {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        #statusIndicator.idle {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        #transcript {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            min-height: 100px;
+        }
+        #debugLog {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #1976d2;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #2196f3;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-link">← Back to Main Page</a>
+    <h1>Speech to Text Testing Tool</h1>
+    <button id="startButton">Start Recording</button>
+    <div id="statusIndicator" class="idle">
+        <span id="statusText">Status: Ready</span>
+    </div>
+    <div id="transcript"></div>
+    <div id="mainTranscription"></div>
+    <div id="debugLog"></div>
+
+    <script>
+        // DOM Elements
+        const startButton = document.getElementById('startButton');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const transcript = document.getElementById('transcript');
+        const mainTranscription = document.getElementById('mainTranscription');
+        const debugLog = document.getElementById('debugLog');
+
+        // Verify all DOM elements are found
+        if (!startButton || !statusIndicator || !statusText || !transcript || 
+            !mainTranscription || !debugLog) {
+            console.error('Failed to find required DOM elements:', {
+                startButton: !!startButton,
+                statusIndicator: !!statusIndicator,
+                statusText: !!statusText,
+                transcript: !!transcript,
+                mainTranscription: !!mainTranscription,
+                debugLog: !!debugLog
+            });
+            throw new Error('Required DOM elements not found');
+        }
+
+        // Audio Configuration
+        const audioConstraints = {
+            audio: {
+                channelCount: 1,
+                sampleRate: 16000,
+                sampleSize: 16,
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        };
+
+        // State variables
+        let mediaRecorder = null;
+        let audioContext = null;
+        let audioSource = null;
+        let audioWorkletNode = null;
+        let mediaStream = null;
+        let ws = null;
+        let isRecording = false;
+        const BUFFER_SIZE = 4096;
+
+        // Utility Functions
+        function updateStatus(status, message) {
+            try {
+                statusIndicator.className = 'status-indicator ' + status;
+                statusText.textContent = message;
+                log(message);
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
+        }
+
+        function log(message, isError = false) {
+            try {
+                console.log(message);
+                const logEntry = document.createElement('div');
+                logEntry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+                if (isError) {
+                    logEntry.style.color = 'red';
+                }
+                debugLog.appendChild(logEntry);
+                debugLog.scrollTop = debugLog.scrollHeight;
+            } catch (error) {
+                console.error('Error logging message:', error);
+            }
+        }
+
+        // Audio Functions
+        async function startRecording() {
+            try {
+                // First, initialize Web Audio API
+                audioContext = new AudioContext({
+                    sampleRate: 16000,
+                    channelCount: 1,
+                    latencyHint: 'interactive'
+                });
+                
+                // Load the AudioWorklet processor
+                try {
+                    await audioContext.audioWorklet.addModule('/static/audio-processor.js');
+                    log('Audio worklet loaded successfully');
+                } catch (error) {
+                    log('Failed to load audio worklet: ' + error.message, true);
+                    throw error;
+                }
+
+                // Then request microphone access
+                updateStatus('active', 'Requesting microphone access...');
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            channelCount: 1,
+                            sampleRate: 16000,
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    });
+                    updateStatus('active', 'Microphone access granted');
+                } catch (error) {
+                    log('Failed to get microphone access: ' + error.message, true);
+                    throw error;
+                }
+
+                // Create audio nodes only after we have the media stream
+                try {
+                    audioSource = audioContext.createMediaStreamSource(mediaStream);
+                    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor', {
+                        numberOfInputs: 1,
+                        numberOfOutputs: 1,
+                        processorOptions: {
+                            sampleRate: 16000,
+                            bufferSize: BUFFER_SIZE
+                        }
+                    });
+                    log('Audio nodes created successfully');
+                } catch (error) {
+                    log('Failed to create audio nodes: ' + error.message, true);
+                    throw error;
+                }
+
+                // Create WebSocket connection
+                try {
+                    ws = new WebSocket('ws://localhost:8000/ws');
+                    
+                    ws.onopen = () => {
+                        updateStatus('active', 'WebSocket connected');
+                        startButton.textContent = 'Stop Listening';
+                        
+                        // Connect audio processing chain
+                        audioSource.connect(audioWorkletNode);
+                        audioWorkletNode.connect(audioContext.destination);
+                        
+                        audioWorkletNode.port.onmessage = (e) => {
+                            if (isRecording && ws.readyState === WebSocket.OPEN) {
+                                ws.send(e.data);
+                            }
+                        };
+                        
+                        isRecording = true;
+                        log("Recording started with AudioWorklet");
+                    };
+                    
+                    ws.onclose = () => {
+                        updateStatus('', 'WebSocket disconnected');
+                        stopRecording();
+                    };
+                    
+                    ws.onerror = (error) => {
+                        updateStatus('error', 'WebSocket error');
+                        console.error(error);
+                        stopRecording();
+                    };
+                    
+                    ws.onmessage = async (event) => {
+                        try {
+                            const message = JSON.parse(event.data);
+                            if (message.wake_word_detected) {
+                                updateStatus('detected', 'Wake word detected!');
+                                document.body.style.backgroundColor = '#90EE90';
+                                setTimeout(() => {
+                                    document.body.style.backgroundColor = '';
+                                    updateStatus('active', 'Listening...');
+                                }, 1000);
+                            } else if (message.type === 'transcription') {
+                                const transcription = message.text;
+                                transcript.textContent = transcription;
+                                mainTranscription.textContent = transcription;
+                                updateStatus('active', 'Transcription received');
+                            } else if (message.type === 'error') {
+                                updateStatus('error', message.message);
+                                log(`Error: ${message.message}`, true);
+                            }
+                        } catch (error) {
+                            log(`Error parsing message: ${error.message}`, true);
+                        }
+                    };
+                } catch (error) {
+                    log('Failed to setup WebSocket: ' + error.message, true);
+                    throw error;
+                }
+                
+            } catch (error) {
+                updateStatus('error', 'Error starting recording: ' + error.message);
+                console.error(error);
+                // Clean up any resources that might have been created
+                await stopRecording();
+            }
+        }
+
+        async function stopRecording() {
+            if (isRecording) {
+                log("Stopping recording...");
+                isRecording = false;
+                
+                // Stop all audio processing
+                if (audioWorkletNode) {
+                    audioWorkletNode.disconnect();
+                    audioSource.disconnect();
+                }
+                
+                // Close audio context
+                if (audioContext && audioContext.state !== 'closed') {
+                    audioContext.close().catch(console.error);
+                }
+                
+                // Stop all media tracks
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => {
+                        track.stop();
+                        log(`Stopped media track: ${track.kind}`);
+                    });
+                    mediaStream = null;
+                }
+                
+                // Close WebSocket connection
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.close();
+                }
+                
+                // Reset UI
+                startButton.textContent = 'Start Listening';
+                updateStatus('', 'Microphone inactive');
+                log("Recording stopped and all resources cleaned up");
+            }
+        }
+
+        // Event Listeners
+        startButton.addEventListener('click', async () => {
+            if (!isRecording) {
+                await startRecording();
+            } else {
+                await stopRecording();
+            }
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            stopRecording();
+        });
+
+        // Initial status
+        updateStatus('', 'Microphone inactive');
+    </script>
+</body>
+</html> 
