@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 import numpy as np
+from sklearn.linear_model import SGDRegressor
 
 from config.settings import Settings
 from src.prioritization.state_encoder import StateEncoder
@@ -19,6 +20,22 @@ class RLModel:
         self.task_evaluator = TaskEvaluator(settings)
         self.state_encoder = StateEncoder(settings)
         self._ensure_data_directory()
+        
+        # Initialize Q-learning model
+        self.q_model = SGDRegressor(
+            learning_rate='constant',
+            eta0=0.01,
+            max_iter=1000,
+            tol=1e-3
+        )
+        self.feature_dim = 10  # Number of features in state representation
+        self._initialize_model()
+
+    def _initialize_model(self):
+        """Initialize the Q-learning model with random weights."""
+        # Create initial weights
+        self.q_model.coef_ = np.random.randn(self.feature_dim)
+        self.q_model.intercept_ = np.random.randn(1)
 
     def _ensure_data_directory(self):
         """Ensure the data directory exists."""
@@ -48,8 +65,20 @@ class RLModel:
     def _train_model(
         self, states: np.ndarray, actions: np.ndarray, rewards: np.ndarray, epochs: int
     ):
-        """Train the model using the given data."""
-        # Implementation of training logic
+        """Train the model using Q-learning."""
+        # Convert states to feature vectors
+        X = self._prepare_features(states)
+        
+        # Train for specified epochs
+        for epoch in range(epochs):
+            # Calculate Q-values for current state
+            current_q_values = self.q_model.predict(X)
+            
+            # Update Q-values using Bellman equation
+            target_q_values = rewards + 0.9 * np.max(current_q_values)  # Discount factor of 0.9
+            
+            # Update model
+            self.q_model.partial_fit(X, target_q_values)
 
     def predict_priority(self, task: Dict[str, Any]) -> int:
         """Predict the priority for a given task."""
@@ -59,13 +88,46 @@ class RLModel:
 
     def _predict(self, state: np.ndarray) -> float:
         """Make a prediction for the given state."""
-        # Implementation of prediction logic
-        return 0.5
+        # Prepare features
+        X = self._prepare_features(state.reshape(1, -1))
+        
+        # Predict Q-value
+        q_value = self.q_model.predict(X)[0]
+        
+        return q_value
+
+    def _prepare_features(self, states: np.ndarray) -> np.ndarray:
+        """Prepare features for the model."""
+        # Normalize features
+        states = (states - np.mean(states, axis=0)) / (np.std(states, axis=0) + 1e-8)
+        return states
 
     def _calculate_reward(self, task: Dict[str, Any]) -> float:
         """Calculate the reward for a task based on its outcome."""
-        # Implementation of reward calculation
-        return 1.0
+        base_reward = 0.0
+        
+        # Reward for completion
+        if task.get("completed", False):
+            base_reward += 1.0
+            
+            # Additional reward for early completion
+            if "due_date" in task and "completion_time" in task:
+                due_date = datetime.fromisoformat(task["due_date"])
+                completion_time = datetime.fromisoformat(task["completion_time"])
+                if completion_time < due_date:
+                    base_reward += 0.5
+                    
+        # Penalty for missing deadline
+        elif "due_date" in task:
+            due_date = datetime.fromisoformat(task["due_date"])
+            if datetime.now() > due_date:
+                base_reward -= 0.5
+                
+        # Adjust reward based on priority
+        priority = task.get("priority", 1)
+        base_reward *= (priority / 5.0)  # Normalize priority to 0-1 range
+        
+        return base_reward
 
     def _convert_score_to_priority(self, score: float) -> int:
         """Convert a prediction score to a priority level."""
@@ -99,12 +161,15 @@ class RLModel:
 
     def _get_model_weights(self) -> Dict[str, Any]:
         """Get the current model weights."""
-        # Implementation of getting model weights
-        return {}
+        return {
+            "coef": self.q_model.coef_.tolist(),
+            "intercept": self.q_model.intercept_.tolist()
+        }
 
     def _set_model_weights(self, weights: Dict[str, Any]):
         """Set the model weights."""
-        # Implementation of setting model weights
+        self.q_model.coef_ = np.array(weights["coef"])
+        self.q_model.intercept_ = np.array(weights["intercept"])
 
     def cleanup(self):
         """Clean up resources."""

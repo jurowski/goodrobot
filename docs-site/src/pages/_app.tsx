@@ -1,11 +1,13 @@
-import { AppProps } from 'next/app';
-import { DocumentationProvider } from '../context/DocumentationContext';
+import type { AppProps } from 'next/app';
+import Header from '../components/Header';
+import '../styles/globals.css';
 
 function MyApp({ Component, pageProps }: AppProps) {
   return (
-    <DocumentationProvider>
+    <>
+      <Header />
       <Component {...pageProps} />
-    </DocumentationProvider>
+    </>
   );
 }
 

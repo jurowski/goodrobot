@@ -1,0 +1,77 @@
+.toc {
+  position: sticky;
+  top: 2rem;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  padding: 1rem;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tocTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.tocList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tocSubList {
+  list-style: none;
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.tocItem {
+  margin: 0.5rem 0;
+}
+
+.tocSection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tocLink {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: color 0.2s ease;
+}
+
+.tocLink:hover {
+  color: var(--text-primary);
+}
+
+.tocLink.active {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.toggleButton {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  font-size: 1rem;
+  transition: color 0.2s ease;
+}
+
+.toggleButton:hover {
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .toc {
+    position: relative;
+    top: 0;
+    margin-bottom: 2rem;
+  }
+} 

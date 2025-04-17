@@ -9,6 +9,7 @@ import pvporcupine
 import pyaudio
 import io
 import soundfile as sf
+from scipy import signal
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class WakeWordDetector:
         self.callback = callback
         self.access_key = settings.picovoice_access_key
         self.sample_rate = settings.sample_rate
+        self.noise_threshold = 0.15  # Default noise threshold
+        self.calibration_data = []
         logger.debug(f"Wake word: {self.wake_word}, Sensitivity: {self.sensitivity}, Sample rate: {self.sample_rate}")
         
         self.porcupine = None
@@ -45,6 +48,93 @@ class WakeWordDetector:
         self.stream = None
         self._is_listening = False
         self.initialize()
+
+    def update_config(self, config: dict):
+        """Update configuration parameters."""
+        if 'sensitivity' in config:
+            self.sensitivity = config['sensitivity']
+            logger.info(f"Updated sensitivity to {self.sensitivity}")
+            self.reinitialize()
+            
+        if 'noiseThreshold' in config:
+            self.noise_threshold = config['noiseThreshold']
+            logger.info(f"Updated noise threshold to {self.noise_threshold}")
+
+    def add_calibration_sample(self, audio_data: bytes):
+        """Add a calibration sample."""
+        if len(self.calibration_data) < 5:
+            self.calibration_data.append(audio_data)
+            logger.info(f"Added calibration sample {len(self.calibration_data)}/5")
+            
+        if len(self.calibration_data) == 5:
+            self._process_calibration()
+
+    def _process_calibration(self):
+        """Process calibration samples to optimize detection parameters."""
+        try:
+            logger.info("Processing calibration samples...")
+            
+            # Convert all samples to numpy arrays
+            samples = []
+            for audio_data in self.calibration_data:
+                with io.BytesIO(audio_data) as audio_buffer:
+                    audio_array, _ = sf.read(audio_buffer)
+                    if len(audio_array.shape) > 1:
+                        audio_array = np.mean(audio_array, axis=1)
+                    samples.append(audio_array)
+            
+            # Calculate average energy and zero-crossing rate
+            energies = []
+            zcrs = []
+            for sample in samples:
+                energy = np.mean(np.square(sample))
+                zcr = np.mean(np.abs(np.diff(np.signbit(sample))))
+                energies.append(energy)
+                zcrs.append(zcr)
+            
+            # Calculate optimal sensitivity based on sample consistency
+            energy_std = np.std(energies)
+            zcr_std = np.std(zcrs)
+            consistency = 1 - min(1, (energy_std + zcr_std) / 2)
+            
+            # More consistent samples = lower sensitivity value (more sensitive)
+            new_sensitivity = max(0.1, min(0.9, 0.5 - (consistency * 0.4)))
+            
+            # Calculate optimal noise threshold
+            min_energy = min(energies)
+            new_noise_threshold = max(0.05, min(0.3, min_energy * 0.8))
+            
+            # Update settings
+            self.sensitivity = new_sensitivity
+            self.noise_threshold = new_noise_threshold
+            
+            logger.info(f"Calibration complete. New sensitivity: {new_sensitivity}, New noise threshold: {new_noise_threshold}")
+            
+            # Reinitialize with new settings
+            self.reinitialize()
+            
+            # Clear calibration data
+            self.calibration_data = []
+            
+        except Exception as e:
+            logger.error(f"Error processing calibration samples: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    def reinitialize(self):
+        """Reinitialize the wake word detector with current settings."""
+        if self.porcupine:
+            self.porcupine.delete()
+        
+        self.porcupine = pvporcupine.create(
+            access_key=self.access_key,
+            keywords=[self.wake_word],
+            sensitivities=[self.sensitivity]
+        )
+        
+        logger.info(
+            f"Wake word detector reinitialized with sensitivity {self.sensitivity}"
+        )
 
     def initialize(self):
         """Initialize Porcupine."""
@@ -62,7 +152,7 @@ class WakeWordDetector:
             self.porcupine = pvporcupine.create(
                 access_key=self.access_key,
                 keywords=[self.wake_word],
-                sensitivities=[0.8]  # Increased sensitivity for better detection
+                sensitivities=[self.sensitivity]
             )
             
             logger.info(
@@ -89,53 +179,88 @@ class WakeWordDetector:
             bool: True if wake word detected, False otherwise
         """
         try:
+            logger.debug(f"Processing audio chunk of size {len(audio_data)} bytes")
+            
             # Convert WebM audio to raw PCM
             with io.BytesIO(audio_data) as audio_buffer:
                 try:
                     # Try reading as WebM/WAV first
                     audio_array, sample_rate = sf.read(audio_buffer)
-                    logger.debug(f"Successfully read audio with soundfile: shape={audio_array.shape}, sample_rate={sample_rate}")
+                    logger.debug(f"Audio format: shape={audio_array.shape}, sample_rate={sample_rate}, dtype={audio_array.dtype}")
                     
                     # Convert to mono if needed
                     if len(audio_array.shape) > 1:
                         audio_array = np.mean(audio_array, axis=1)
                         logger.debug("Converted stereo to mono")
                     
+                    # Resample if needed
+                    if sample_rate != self.sample_rate:
+                        logger.debug(f"Resampling from {sample_rate}Hz to {self.sample_rate}Hz")
+                        samples = int((len(audio_array) * self.sample_rate) / sample_rate)
+                        audio_array = np.interp(
+                            np.linspace(0, len(audio_array), samples, endpoint=False),
+                            np.arange(len(audio_array)),
+                            audio_array
+                        )
+                    
+                    # Apply pre-emphasis filter to enhance high frequencies
+                    pre_emphasis = 0.97
+                    emphasized_audio = np.append(audio_array[0], audio_array[1:] - pre_emphasis * audio_array[:-1])
+                    
+                    # Apply bandpass filter for speech frequencies (80Hz - 4000Hz)
+                    nyquist = self.sample_rate // 2
+                    low = 80 / nyquist
+                    high = 4000 / nyquist
+                    b, a = signal.butter(4, [low, high], btype='band')
+                    filtered_audio = signal.filtfilt(b, a, emphasized_audio)
+                    
+                    # Check if audio energy is above noise threshold
+                    energy = np.mean(np.square(filtered_audio))
+                    if energy < self.noise_threshold:
+                        logger.debug(f"Audio energy {energy} below noise threshold {self.noise_threshold}")
+                        return False
+                    
                     # Normalize audio to increase detection chances
-                    max_val = np.max(np.abs(audio_array))
+                    max_val = np.max(np.abs(filtered_audio))
                     if max_val > 0:
-                        audio_array = audio_array / max_val
+                        filtered_audio = filtered_audio / max_val
+                        logger.debug(f"Normalized audio: max_val={max_val}")
                     
                     # Convert to int16
-                    audio_array = (audio_array * 32767).astype(np.int16)
+                    audio_array = (filtered_audio * 32767).astype(np.int16)
                     
                 except Exception as e:
-                    logger.debug(f"Failed to read with soundfile: {e}, trying direct conversion")
+                    logger.warning(f"Failed to read with soundfile: {e}, trying direct conversion")
                     # If soundfile fails, try direct numpy conversion
-                    # Ensure the buffer size is even (for int16)
                     if len(audio_data) % 2 != 0:
                         audio_data = audio_data[:-1]
                     audio_array = np.frombuffer(audio_data, dtype=np.int16)
-                    # Normalize int16 audio
                     max_val = np.max(np.abs(audio_array))
                     if max_val > 0:
                         audio_array = (audio_array / max_val * 32767).astype(np.int16)
 
-            logger.debug(f"Final audio array: shape={audio_array.shape}, dtype={audio_array.dtype}, min={np.min(audio_array)}, max={np.max(audio_array)}")
-            
             # Ensure correct number of samples
             frame_length = self.porcupine.frame_length
             if len(audio_array) < frame_length:
                 logger.debug(f"Padding audio from {len(audio_array)} to {frame_length} samples")
                 audio_array = np.pad(audio_array, (0, frame_length - len(audio_array)))
             elif len(audio_array) > frame_length:
-                logger.debug(f"Truncating audio from {len(audio_array)} to {frame_length} samples")
-                # Take samples from the middle for better detection
-                start = (len(audio_array) - frame_length) // 2
-                audio_array = audio_array[start:start + frame_length]
+                logger.debug(f"Processing audio in chunks of {frame_length} samples")
+                # Process audio in overlapping chunks
+                step = frame_length // 2  # 50% overlap
+                for i in range(0, len(audio_array) - frame_length + 1, step):
+                    chunk = audio_array[i:i + frame_length]
+                    result = self.porcupine.process(chunk)
+                    if result >= 0:
+                        logger.info(f"Wake word '{self.wake_word}' detected!")
+                        if self.callback:
+                            self.callback()
+                        return True
+                return False
             
-            # Process the audio frame
+            # Process single frame
             result = self.porcupine.process(audio_array)
+            
             if result >= 0:
                 logger.info(f"Wake word '{self.wake_word}' detected!")
                 if self.callback:

@@ -26,12 +26,139 @@ This system understands the user deeply through accumulated interactions and ser
 - Context-aware recommendations
 - Whole-life perspective
 
+## Documentation
+
+- [API Documentation](docs/API.md) - REST API reference and usage guide
+- [Sequence Optimization](docs/sequence_optimization.md) - Detailed explanation of task sequence optimization
+- [Developer Guide](docs/DEVELOPER.md) - Development guidelines and best practices
+
+## Documentation Site
+
+The project includes a comprehensive documentation site built with Next.js. The documentation site provides:
+
+- Interactive search functionality for all documentation
+- Category-based filtering of documentation
+- Real-time search results with highlighted matches
+- Detailed system documentation with code examples
+
+### Accessing Documentation
+
+1. Start the documentation site:
+```bash
+cd docs-site
+npm install
+npm run dev
+```
+
+2. Access the documentation at:
+- Main documentation search: `http://localhost:3000`
+- System documentation: `http://localhost:3000/system/[system-id]`
+
+The main documentation page (`/`) now serves as a search interface, allowing users to quickly find relevant documentation. The search functionality includes:
+
+- Full-text search across all documentation
+- Category filtering
+- Real-time search results
+- Highlighted matches in search results
+- Tag-based organization
+
+## API Integration
+
+The GoodRobot API provides a powerful interface for interacting with the sequence optimization system. The API is built using FastAPI and offers comprehensive endpoints for task sequence optimization and pattern analysis.
+
+### Quick Start
+
+1. Start the API server:
+```bash
+python run_api.py
+```
+
+2. Access the interactive API documentation:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+### Key Endpoints
+
+#### Sequence Optimization
+- `POST /api/sequence/optimize` - Optimizes task sequences based on multiple factors
+- `GET /api/sequence/status` - Checks the status of sequence optimization
+- `POST /api/sequence/analyze` - Analyzes sequence patterns and metrics
+
+#### Pattern Analysis
+- `POST /api/pattern/analyze` - Performs comprehensive pattern analysis
+- `GET /api/pattern/metrics` - Retrieves pattern metrics and statistics
+- `POST /api/pattern/recommend` - Generates pattern recommendations
+
+### Integration Examples
+
+#### Python Client
+```python
+import requests
+
+# Optimize a sequence of tasks
+response = requests.post(
+    "http://localhost:8000/api/sequence/optimize",
+    json={
+        "tasks": [
+            {
+                "id": "task1",
+                "priority": 0.8,
+                "dependencies": [],
+                "resources": ["resource1"],
+                "estimated_duration": 3600
+            }
+        ],
+        "constraints": {
+            "max_duration": 86400,
+            "resource_limits": {
+                "resource1": 1
+            }
+        }
+    }
+)
+```
+
+#### cURL Example
+```bash
+curl -X POST "http://localhost:8000/api/sequence/optimize" \
+     -H "Content-Type: application/json" \
+     -d '{
+         "tasks": [
+             {
+                 "id": "task1",
+                 "priority": 0.8,
+                 "dependencies": [],
+                 "resources": ["resource1"],
+                 "estimated_duration": 3600
+             }
+         ],
+         "constraints": {
+             "max_duration": 86400,
+             "resource_limits": {
+                 "resource1": 1
+             }
+         }
+     }'
+```
+
 ## Directory Structure
 
 ```
 goodrobot/
 ├── README.md                     # Project overview and setup instructions
 ├── requirements.txt              # Python dependencies
+├── docs-site/                    # Documentation site
+│   ├── src/                      # Next.js source code
+│   │   ├── components/           # React components
+│   │   │   ├── Search.tsx        # Main search component
+│   │   │   └── CodePreview.tsx   # Code preview component
+│   │   ├── pages/                # Next.js pages
+│   │   │   ├── index.tsx         # Main search page
+│   │   │   └── system/[id].tsx   # System documentation
+│   │   ├── context/              # React context
+│   │   ├── services/             # API services
+│   │   └── utils/                # Utility functions
+│   └── public/                   # Static assets
 ├── config/                       # Configuration files
 │   ├── settings.py               # Global settings
 │   └── logging.py                # Logging configuration
@@ -125,7 +252,27 @@ pytest-cov==4.1.0
    pytest
    ```
 
-7. Start the assistant:
+7. Start the development environment:
+   ```bash
+   # Make the script executable (only needed once)
+   chmod +x scripts/start_dev.sh
+   
+   # Start both servers with a single command
+   ./scripts/start_dev.sh
+   ```
+   
+   This will start:
+   - Next.js frontend at http://localhost:3000 (documentation site)
+   - FastAPI backend at http://localhost:8000
+   
+   The script automatically:
+   - Kills any existing processes on ports 3000 and 8000
+   - Starts both servers with hot-reloading enabled
+   - Handles cleanup when you press Ctrl+C
+   
+   Both servers will automatically reload when files change.
+
+8. Start the assistant:
    ```bash
    python src/main.py
    ```

@@ -42,7 +42,7 @@ interface Category {
   name: string;
 }
 
-export default function TestSearch() {
+export default function Search() {
   const router = useRouter();
   const { documentation, loading, error } = useDocumentation();
   const [query, setQuery] = useState('');
@@ -207,55 +207,33 @@ export default function TestSearch() {
   }
 
   return (
-    <div style={{
-      maxWidth: '800px',
-      margin: '0 auto',
-      padding: '2rem'
-    }}>
-      <div style={{
-        marginBottom: '2rem'
-      }}>
+    <div className={styles.container}>
+      <div className={styles.searchContainer}>
         <input
           type="text"
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
           placeholder="Search documentation..."
-          style={{
-            width: '100%',
-            padding: '12px',
-            fontSize: '1rem',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            marginBottom: '1rem'
-          }}
+          className={styles.searchInput}
         />
-        {categories.length > 0 && (
-          <div style={{
-            display: 'flex',
-            gap: '8px',
-            marginBottom: '1rem'
-          }}>
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategory(
-                  selectedCategory === category.id ? null : category.id
-                )}
-                style={{
-                  padding: '8px 16px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  backgroundColor: selectedCategory === category.id ? '#f0f0f0' : 'white',
-                  cursor: 'pointer'
-                }}
-              >
+        <div className={styles.categoryFilter}>
+          <select
+            value={selectedCategory || ''}
+            onChange={(e) => setSelectedCategory(e.target.value || null)}
+            className={styles.categorySelect}
+          >
+            <option value="">All Categories</option>
+            {categories.map((category: Category) => (
+              <option key={category.id} value={category.id}>
                 {category.name}
-              </button>
+              </option>
             ))}
-          </div>
-        )}
+          </select>
+        </div>
       </div>
-      {renderSearchResults()}
+      <div className={styles.searchResults}>
+        {renderSearchResults()}
+      </div>
     </div>
   );
-}
+} 
