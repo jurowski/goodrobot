@@ -11,6 +11,7 @@ import os
 import wave
 from datetime import datetime
 from pathlib import Path
+from typing import Dict
 
 import numpy as np
 import soundfile as sf
@@ -19,13 +20,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.websockets import WebSocketDisconnect
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from src.settings import Settings
 from src.voice_recognition.speech_to_text import SpeechToText
 from src.voice_recognition.wake_word import WakeWordDetector
+from src.utils.logging import websocket_logger
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,10 +43,16 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Configure CORS
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Enhanced CORS configuration
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -75,6 +86,18 @@ class SiteCreate(BaseModel):
     domain: str
     description: str
     port: int
+
+    @validator('port')
+    def validate_port(cls, v):
+        if v < 1024 or v > 65535:
+            raise ValueError('Port number must be between 1024 and 65535')
+        return v
+
+    @validator('domain')
+    def validate_domain(cls, v):
+        if not v or len(v) > 255:
+            raise ValueError('Domain must be between 1 and 255 characters')
+        return v
 
 
 class RedirectMiddleware(BaseHTTPMiddleware):
@@ -141,30 +164,46 @@ async def voice_interface(request: Request):
     return templates.TemplateResponse("voice.html", {"request": request})
 
 
+class CustomHTTPException(HTTPException):
+    def __init__(self, status_code: int, detail: str, log_message: str = None):
+        super().__init__(status_code=status_code, detail=detail)
+        if log_message:
+            logger.error(log_message)
+
+
 @app.post("/voice")
-async def process_voice(audio: UploadFile = File(...), language: str = Form(...)):
-    """Process voice input and return response."""
+@limiter.limit("10/minute")
+async def process_voice(request: Request, audio: UploadFile = File(...), language: str = Form(...)):
     try:
-        # Read audio file
-        audio_data = await audio.read()
-
-        # Check for wake word
-        if wake_word_detector.process_audio_chunk(audio_data):
-            # Transcribe audio
-            transcription = await speech_to_text.transcribe_audio(audio_data)
-
-            # TODO: Process the transcription and generate response
-            response = f"Transcription: {transcription}"
-
-            return {"transcription": transcription, "response": response}
-        else:
-            return {
-                "transcription": "No wake word detected",
-                "response": "Please say the wake word first",
-            }
+        contents = await audio.read()
+        if not contents:
+            raise CustomHTTPException(
+                status_code=400,
+                detail="Empty audio file",
+                log_message="Received empty audio file"
+            )
+            
+        # Process audio data
+        audio_array = np.frombuffer(contents, dtype=np.int16)
+        wake_word_detected = wake_word_detector.process_audio_chunk(contents)
+        
+        if not wake_word_detected:
+            return {"wake_word_detected": False}
+            
+        transcription = await speech_to_text.transcribe_audio(contents)
+        return {
+            "wake_word_detected": True,
+            "transcription": transcription
+        }
+            
+    except CustomHTTPException as e:
+        raise e
     except Exception as e:
-        logger.error(f"Error processing voice: {str(e)}")
-        return {"error": str(e)}
+        raise CustomHTTPException(
+            status_code=500,
+            detail="Internal server error",
+            log_message=f"Error processing voice: {str(e)}"
+        )
 
 
 class WebSocketLogHandler(logging.Handler):
@@ -201,119 +240,131 @@ class WebSocketLogHandler(logging.Handler):
             print(f"Error in WebSocketLogHandler: {e}")
 
 
-@app.websocket("/voice")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
+class WebSocketManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+        self.audio_processors: Dict[str, AudioProcessor] = {}
+        self.logger = websocket_logger
+    
+    async def connect(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
+        self.audio_processors[client_id] = AudioProcessor()
+        self.logger.logger.info(f"Client {client_id} connected")
+        
+        # Add WebSocket handler for client-specific logging
+        ws_handler = self.logger.add_websocket_handler(websocket, client_id)
+        return ws_handler
+    
+    async def disconnect(self, client_id: str, ws_handler=None):
+        if client_id in self.active_connections:
+            if ws_handler:
+                self.logger.remove_websocket_handler(ws_handler)
+            
+            # Cleanup resources
+            del self.active_connections[client_id]
+            if client_id in self.audio_processors:
+                await self.audio_processors[client_id].cleanup()
+                del self.audio_processors[client_id]
+            
+            self.logger.logger.info(f"Client {client_id} disconnected")
+    
+    async def process_json_message(self, message: str, client_id: str):
+        try:
+            data = json.loads(message)
+            self.logger.logger.debug(f"Received JSON message from client {client_id}: {data}")
+            
+            # Process JSON message based on type
+            message_type = data.get("type")
+            if message_type == "config":
+                await self._handle_config_message(data, client_id)
+            elif message_type == "command":
+                await self._handle_command_message(data, client_id)
+            else:
+                self.logger.logger.warning(f"Unknown message type from client {client_id}: {message_type}")
+                
+        except json.JSONDecodeError as e:
+            self.logger.logger.error(f"Invalid JSON from client {client_id}: {e}")
+            await self._send_error(client_id, "Invalid JSON format")
+        except Exception as e:
+            self.logger.logger.error(f"Error processing JSON message from client {client_id}: {e}")
+            await self._send_error(client_id, "Internal server error")
+    
+    async def process_binary_message(self, message: bytes, client_id: str):
+        try:
+            if client_id not in self.audio_processors:
+                raise ValueError("No audio processor found for client")
+            
+            processor = self.audio_processors[client_id]
+            result = await processor.process_audio(message)
+            
+            await self.active_connections[client_id].send_json({
+                "type": "audio_processed",
+                "data": result
+            })
+            
+        except Exception as e:
+            self.logger.logger.error(f"Error processing binary message from client {client_id}: {e}")
+            await self._send_error(client_id, "Error processing audio data")
+    
+    async def _handle_config_message(self, data: dict, client_id: str):
+        try:
+            if client_id in self.audio_processors:
+                await self.audio_processors[client_id].configure(data.get("config", {}))
+                self.logger.logger.info(f"Updated configuration for client {client_id}")
+        except Exception as e:
+            self.logger.logger.error(f"Error configuring audio processor for client {client_id}: {e}")
+            await self._send_error(client_id, "Configuration error")
+    
+    async def _handle_command_message(self, data: dict, client_id: str):
+        try:
+            command = data.get("command")
+            if command == "start":
+                # Handle start command
+                pass
+            elif command == "stop":
+                # Handle stop command
+                pass
+            else:
+                self.logger.logger.warning(f"Unknown command from client {client_id}: {command}")
+        except Exception as e:
+            self.logger.logger.error(f"Error handling command for client {client_id}: {e}")
+            await self._send_error(client_id, "Command processing error")
+    
+    async def _send_error(self, client_id: str, message: str):
+        try:
+            if client_id in self.active_connections:
+                await self.active_connections[client_id].send_json({
+                    "type": "error",
+                    "message": message
+                })
+        except Exception as e:
+            self.logger.logger.error(f"Error sending error message to client {client_id}: {e}")
 
-    # Add WebSocket log handler
-    ws_log_handler = WebSocketLogHandler(websocket)
-    logger.addHandler(ws_log_handler)
+websocket_manager = WebSocketManager()
 
-    # Send recent logs from file
-    try:
-        log_file = Path("logs/voice_session.log")
-        if log_file.exists():
-            with open(log_file, "r") as f:
-                for line in f:
-                    try:
-                        log_entry = json.loads(line.strip())
-                        if log_entry.get("type") == "log":
-                            await websocket.send_json(log_entry)
-                    except json.JSONDecodeError:
-                        continue
-    except Exception as e:
-        logger.error(f"Error sending recent logs: {e}")
-
-    logger.info("WebSocket connection opened")
-    logger.info(f"WebSocket client: {websocket.client}")
-    logger.info(f"WebSocket headers: {websocket.headers}")
-
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    ws_handler = await websocket_manager.connect(websocket, client_id)
+    
     try:
         while True:
-            try:
-                message = await websocket.receive()
-                logger.debug(f"Received message type: {message.get('type')}")
-                logger.debug(f"Message content: {message}")
-
-                if message["type"] == "websocket.disconnect":
-                    logger.info("WebSocket disconnect message received")
-                    logger.info(f"Disconnect code: {message.get('code')}")
-                    logger.info(f"Disconnect reason: {message.get('reason')}")
-                    break
-
-                if message["type"] == "websocket.receive":
-                    if "text" in message:
-                        # Handle JSON messages
-                        try:
-                            data = json.loads(message["text"])
-                            logger.debug(f"Received JSON data: {data}")
-                            if data.get("type") == "config":
-                                logger.info(f"Received config: {data.get('data')}")
-                                await websocket.send_json({"type": "config_received"})
-                                logger.debug("Sent config_received response")
-                                continue
-                        except json.JSONDecodeError as e:
-                            logger.error(f"Failed to decode JSON message: {e}")
-                            logger.error(f"Raw message text: {message.get('text')}")
-                            continue
-
-                    elif "bytes" in message:
-                        # Handle binary audio data
-                        try:
-                            data = message["bytes"]
-                            logger.debug(f"Received audio data size: {len(data)} bytes")
-                            audio_array = np.frombuffer(data, dtype=np.int16)
-                            logger.debug(
-                                f"Audio array shape: {audio_array.shape}, dtype: {audio_array.dtype}"
-                            )
-
-                            # Process audio without reshaping assumptions
-                            result = await process_audio(audio_array)
-                            logger.debug(f"Processing result: {result}")
-
-                            # Send result back
-                            await websocket.send_json(result)
-                            logger.debug("Sent processing result back to client")
-
-                        except Exception as e:
-                            logger.error(f"Error processing audio data: {str(e)}")
-                            logger.error(
-                                f"Audio data type: {type(data)}, length: {len(data) if hasattr(data, '__len__') else 'N/A'}"
-                            )
-                            await websocket.send_json(
-                                {
-                                    "type": "error",
-                                    "error": "Failed to process audio data",
-                                }
-                            )
-                            continue
-
-            except WebSocketDisconnect as e:
-                logger.info(f"WebSocket disconnected by client: {str(e)}")
-                logger.info(f"Disconnect code: {getattr(e, 'code', 'N/A')}")
-                logger.info(f"Disconnect reason: {getattr(e, 'reason', 'N/A')}")
+            message = await websocket.receive()
+            
+            if message["type"] == "websocket.disconnect":
                 break
-            except Exception as e:
-                logger.error(f"Unexpected error in WebSocket loop: {str(e)}")
-                logger.error(f"Error type: {type(e)}")
-                logger.error(f"Error traceback: {e.__traceback__}")
-                try:
-                    await websocket.send_json(
-                        {"type": "error", "error": "Internal server error"}
-                    )
-                except Exception as send_error:
-                    logger.error(f"Failed to send error message: {str(send_error)}")
-                    break
-
+                
+            if message["type"] == "websocket.receive":
+                if "text" in message:
+                    await websocket_manager.process_json_message(message["text"], client_id)
+                elif "bytes" in message:
+                    await websocket_manager.process_binary_message(message["bytes"], client_id)
+    
     except Exception as e:
-        logger.error(f"WebSocket connection error: {str(e)}")
-        logger.error(f"Error type: {type(e)}")
-        logger.error(f"Error traceback: {e.__traceback__}")
+        websocket_manager.logger.logger.error(f"WebSocket error for client {client_id}: {e}")
+    
     finally:
-        logger.info("WebSocket connection closed")
-        logger.info(f"WebSocket state: {websocket.client_state}")
-        # Remove the WebSocket log handler
-        logger.removeHandler(ws_log_handler)
+        await websocket_manager.disconnect(client_id, ws_handler)
 
 
 async def process_audio(audio_array: np.ndarray) -> dict:
