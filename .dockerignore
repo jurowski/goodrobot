@@ -1,0 +1,42 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.env
+.env.*
+*.log
+
+# Development
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation
+docs-site/
+docs/
+*.md
+
+# Node.js (for docs-site)
+node_modules/
+package-lock.json
+package.json
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+.mypy_cache/

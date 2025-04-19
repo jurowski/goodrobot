@@ -1,0 +1,62 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/goodrobot', '.']
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/goodrobot']
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'goodrobot'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/goodrobot'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--port'
+      - '8000'
+      - '--min-instances'
+      - '1'
+      - '--set-env-vars'
+      - 'ENVIRONMENT=production'
+
+  # Map apex domain to Cloud Run service
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'beta'
+      - 'run'
+      - 'domain-mappings'
+      - 'create'
+      - '--service=goodrobot'
+      - '--domain=goodrobot.cloud'
+      - '--region=us-central1'
+      - '--platform=managed'
+
+  # Map www subdomain to Cloud Run service
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'beta'
+      - 'run'
+      - 'domain-mappings'
+      - 'create'
+      - '--service=goodrobot'
+      - '--domain=www.goodrobot.cloud'
+      - '--region=us-central1'
+      - '--platform=managed'
+
+images:
+  - 'gcr.io/$PROJECT_ID/goodrobot'

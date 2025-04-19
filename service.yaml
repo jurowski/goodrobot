@@ -1,0 +1,39 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: voice-app
+  namespace: 'goodrobot-1'
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "100"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+        run.googleapis.com/container-readiness-timeout: "1200s"
+        run.googleapis.com/execution-environment: "gen2"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: gcr.io/goodrobot-1/voice-app
+          ports:
+            - containerPort: 8000
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          env:
+            - name: ENVIRONMENT
+              value: "production"
+            - name: PICOVOICE_ACCESS_KEY
+              value: ""
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3

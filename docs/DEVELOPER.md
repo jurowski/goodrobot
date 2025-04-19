@@ -190,4 +190,130 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Project Structure](#project-structure)
-- [API Documentation](API.md) 
+- [API Documentation](API.md)
+
+## Browser Testing and Configuration
+
+### Recommended Browsers for Development
+
+For development and testing, we recommend using Firefox for the following reasons:
+
+1. **WebSocket Support**: Firefox has excellent WebSocket support and is more forgiving with development environments
+2. **Clean Environment Separation**: Better separation between development and production environments
+3. **Less Aggressive Caching**: More predictable caching behavior compared to Chrome
+4. **Development Tools**: Comprehensive set of development tools and features
+
+### Firefox Development Configuration
+
+To optimize Firefox for development:
+
+1. Open Firefox and go to `about:config`
+2. Set the following preferences:
+   ```javascript
+   // Allow insecure WebSocket connections during development
+   network.websocket.allowInsecureFromHTTPS = true
+
+   // Disable cache for development
+   browser.cache.disk.enable = false
+   browser.cache.memory.enable = false
+
+   // Enable development tools
+   devtools.debugger.remote-enabled = true
+   ```
+
+3. Install the following recommended extensions:
+   - React Developer Tools
+   - Redux DevTools
+   - Web Developer Tools
+
+### Browser Cache Management
+
+To prevent caching issues during development:
+
+1. **Clear Cache**: Use `Ctrl+Shift+Del` (Windows/Linux) or `Cmd+Shift+Del` (Mac) to clear browser cache
+2. **Private Browsing**: Use private/incognito windows for testing
+3. **Cache Control Headers**: The development server is configured to send appropriate cache control headers
+
+### Development Environment Variables
+
+Create a `.env` file in the project root with the following variables:
+
+```env
+# Development Environment
+ENVIRONMENT=development
+
+# API Configuration
+API_HOST=0.0.0.0
+API_PORT=8000
+
+# Frontend Configuration
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_WS_URL=ws://localhost:8000
+
+# Development Features
+DISABLE_HTTPS_REDIRECT=true
+ENABLE_DEV_TOOLS=true
+```
+
+### Troubleshooting Browser Issues
+
+If you encounter issues:
+
+1. **HTTPS Redirect Problems**:
+   - Clear browser cache
+   - Use private browsing window
+   - Verify `DISABLE_HTTPS_REDIRECT=true` in `.env`
+
+2. **WebSocket Connection Issues**:
+   - Check Firefox WebSocket settings
+   - Verify `network.websocket.allowInsecureFromHTTPS = true`
+   - Ensure correct WebSocket URL in frontend configuration
+
+3. **Cache-Related Issues**:
+   - Clear browser cache
+   - Use private browsing window
+   - Disable browser cache in development
+
+## Voice Interface Components
+
+### Activity Log
+The voice interface includes an activity log panel that displays system events and messages:
+- Real-time logging of client and server events
+- Filterable by log level (DEBUG, INFO, WARNING, ERROR)
+- Search functionality
+- Copy to clipboard feature
+- Clear logs option
+- Collapsible panel design
+
+### Audio Visualization
+The interface provides visual feedback for audio input:
+- Microphone icon with blue glow effect when active
+- Animated wave rings indicating audio detection
+- Volume level meter with real-time feedback
+- Responsive design that scales with window size
+
+### Styling Variables
+The interface uses CSS variables for consistent theming:
+```css
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2c3e50;
+    --background-color: #1a1a1a;
+    --surface-color: #2d2d2d;
+    --text-color: #e0e0e0;
+    --border-color: #404040;
+    --hover-color: #2980b9;
+    --success-color: #4CAF50;
+    --error-color: #ff6b6b;
+    --muted-text: #a0a0a0;
+}
+```
+
+### Responsive Design
+The interface is fully responsive:
+- Adapts to different screen sizes
+- Column collapsing for space efficiency
+- Fluid typography and spacing
+- Mobile-friendly controls
+
+// ... existing code ...

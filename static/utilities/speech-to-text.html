@@ -84,7 +84,7 @@
         const debugLog = document.getElementById('debugLog');
 
         // Verify all DOM elements are found
-        if (!startButton || !statusIndicator || !statusText || !transcript || 
+        if (!startButton || !statusIndicator || !statusText || !transcript ||
             !mainTranscription || !debugLog) {
             console.error('Failed to find required DOM elements:', {
                 startButton: !!startButton,
@@ -154,7 +154,7 @@
                     channelCount: 1,
                     latencyHint: 'interactive'
                 });
-                
+
                 // Load the AudioWorklet processor
                 try {
                     await audioContext.audioWorklet.addModule('/static/audio-processor.js');
@@ -201,37 +201,37 @@
 
                 // Create WebSocket connection
                 try {
-                    ws = new WebSocket('ws://localhost:8000/ws');
-                    
+                    ws = new WebSocket('ws://localhost:8000/voice');
+
                     ws.onopen = () => {
                         updateStatus('active', 'WebSocket connected');
                         startButton.textContent = 'Stop Listening';
-                        
+
                         // Connect audio processing chain
                         audioSource.connect(audioWorkletNode);
                         audioWorkletNode.connect(audioContext.destination);
-                        
+
                         audioWorkletNode.port.onmessage = (e) => {
                             if (isRecording && ws.readyState === WebSocket.OPEN) {
                                 ws.send(e.data);
                             }
                         };
-                        
+
                         isRecording = true;
                         log("Recording started with AudioWorklet");
                     };
-                    
+
                     ws.onclose = () => {
                         updateStatus('', 'WebSocket disconnected');
                         stopRecording();
                     };
-                    
+
                     ws.onerror = (error) => {
                         updateStatus('error', 'WebSocket error');
                         console.error(error);
                         stopRecording();
                     };
-                    
+
                     ws.onmessage = async (event) => {
                         try {
                             const message = JSON.parse(event.data);
@@ -259,7 +259,7 @@
                     log('Failed to setup WebSocket: ' + error.message, true);
                     throw error;
                 }
-                
+
             } catch (error) {
                 updateStatus('error', 'Error starting recording: ' + error.message);
                 console.error(error);
@@ -272,18 +272,18 @@
             if (isRecording) {
                 log("Stopping recording...");
                 isRecording = false;
-                
+
                 // Stop all audio processing
                 if (audioWorkletNode) {
                     audioWorkletNode.disconnect();
                     audioSource.disconnect();
                 }
-                
+
                 // Close audio context
                 if (audioContext && audioContext.state !== 'closed') {
                     audioContext.close().catch(console.error);
                 }
-                
+
                 // Stop all media tracks
                 if (mediaStream) {
                     mediaStream.getTracks().forEach(track => {
@@ -292,12 +292,12 @@
                     });
                     mediaStream = null;
                 }
-                
+
                 // Close WebSocket connection
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.close();
                 }
-                
+
                 // Reset UI
                 startButton.textContent = 'Start Listening';
                 updateStatus('', 'Microphone inactive');
@@ -323,4 +323,4 @@
         updateStatus('', 'Microphone inactive');
     </script>
 </body>
-</html> 
+</html>
