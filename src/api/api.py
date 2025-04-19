@@ -26,11 +26,15 @@ from starlette.websockets import WebSocketDisconnect
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from .routes import research
+from .database.research_db import ResearchDatabase
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from src.settings import Settings
 from src.voice_recognition.speech_to_text import SpeechToText
 from src.voice_recognition.wake_word import WakeWordDetector
 from src.utils.logging import websocket_logger
+from src.audio.audio_processor import AudioProcessor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -455,3 +459,23 @@ def ensure_directories():
 
 # Initialize directories
 ensure_directories()
+
+app.include_router(research.router)
+
+@app.get("/research")
+async def research_page(request: Request):
+    """Render the research page."""
+    return templates.TemplateResponse(
+        "research.html",
+        {"request": request}
+    )
+
+# Add MongoDB client to app state
+@app.on_event("startup")
+async def startup_db_client():
+    app.mongodb_client = AsyncIOMotorClient("mongodb://localhost:27017")
+    app.research_db = ResearchDatabase(app.mongodb_client)
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    app.mongodb_client.close()

@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Good Robot Voice Interface</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon/favicon-16x16.png">
+    <link rel="manifest" href="/static/favicon/site.webmanifest">
     <style>
         :root {
             --primary-color: #3498db;
@@ -331,6 +335,7 @@
             flex-direction: column;
             height: 100%;
             gap: 1rem;
+            min-height: min-content;
         }
 
         .header-controls {
@@ -383,6 +388,7 @@
             border-radius: 6px;
             padding: 0.75rem;
             border: 1px solid rgba(255, 255, 255, 0.1);
+            min-height: 100px;
         }
 
         .log-entry {
@@ -444,18 +450,82 @@
             border-radius: 6px;
             padding: 0.75rem;
             width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
         }
 
         .log-filters {
             display: flex;
             gap: 1rem;
-            margin-bottom: 0.75rem;
         }
 
         .log-level-filters {
             display: grid;
-            grid-template-columns: repeat(2, 1fr); /* 2 columns for better layout */
+            grid-template-columns: repeat(2, 1fr);
             gap: 0.5rem;
+        }
+
+        .log-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-controls-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .search-wrapper {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .search-input {
+            width: 100%;
+            background: rgba(32, 32, 32, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            color: var(--text-color);
+            padding: 0.5rem;
+            font-size: 0.85rem;
+            height: 36px;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .icon-button {
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .icon-button:hover {
+            color: var(--primary-color);
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .icon-button svg {
+            width: 18px;
+            height: 18px;
         }
 
         .log-filter, .log-level-filter {
@@ -816,7 +886,7 @@
             flex-direction: column;
             height: 100%;
             gap: 1rem;
-            min-height: min-content; /* Allow content to determine minimum height */
+            min-height: min-content;
         }
 
         .header-controls {
@@ -839,7 +909,7 @@
             border-radius: 6px;
             padding: 0.75rem;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            min-height: 100px; /* Ensure some space for logs */
+            min-height: 100px;
         }
 
         .log-controls {
@@ -849,6 +919,46 @@
             border-radius: 6px;
             padding: 0.75rem;
             width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .log-filters {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .log-level-filters {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .log-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-controls-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 120px;
+            background: rgba(32, 32, 32, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            color: var(--text-color);
+            padding: 0.5rem;
+            font-size: 0.85rem;
+            height: 36px;
         }
 
         /* Button styles */
@@ -878,6 +988,15 @@
         input[type="range"] {
             flex-shrink: 0;
         }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .search-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
     </style>
 </head>
 <body>
@@ -890,6 +1009,7 @@
             <a href="http://localhost:3000" class="nav-link" target="_blank" rel="noopener noreferrer">Documentation</a>
             <a href="http://localhost:8000/redoc" class="nav-link" target="_blank" rel="noopener noreferrer">API Docs</a>
             <a href="http://localhost:8000/voice" class="nav-link">Voice Interface</a>
+            <a href="/research" class="nav-link">Research</a>
         </nav>
     </header>
 
@@ -1021,52 +1141,41 @@
                     <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
             </button>
-            <div class="collapsed-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-            </div>
             <div class="column-content">
                 <div class="logs-content">
-                    <div class="header-controls">
-                        <div class="log-search">
-                            <input type="text" id="logSearch" placeholder="Search logs...">
-                            <button id="clearSearch" title="Clear search">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                                </svg>
-                            </button>
-                        </div>
-                        <div class="action-buttons">
-                            <button class="clear-button" id="clearLogs" title="Clear all logs">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M3 6h18"></path>
-                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                </svg>
-                            </button>
-                            <button class="copy-button" id="copyLogs" title="Copy logs">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="log-container" id="logContainer">
-                        <!-- Logs will be inserted here -->
-                    </div>
+                    <div class="log-container" id="logContainer"></div>
                     <div class="log-controls">
+                        <div class="log-buttons">
+                            <div class="search-wrapper">
+                                <input type="text" id="logSearch" placeholder="Search logs..." class="search-input">
+                            </div>
+                            <div class="log-controls-right">
+                                <button class="icon-button" id="copyLogs" title="Copy logs to clipboard">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                </button>
+                                <button class="icon-button" id="clearLogs" title="Clear all logs">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M3 6h18"></path>
+                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                         <div class="log-filters">
-                            <label class="log-filter">
-                                <input type="checkbox" id="showServerLogs" checked>
-                                Server Logs
-                            </label>
-                            <label class="log-filter">
-                                <input type="checkbox" id="showClientLogs" checked>
-                                Client Logs
-                            </label>
+                            <div class="source-filters">
+                                <label class="log-filter">
+                                    <input type="checkbox" id="showServerLogs" checked>
+                                    Server Logs
+                                </label>
+                                <label class="log-filter">
+                                    <input type="checkbox" id="showClientLogs" checked>
+                                    Client Logs
+                                </label>
+                            </div>
                         </div>
                         <div class="log-level-filters">
                             <label class="log-level-filter">
@@ -1137,9 +1246,9 @@
         let gainNode;
         let calibrationMode = false;
         let calibrationSamples = [];
-        let reconnectAttempts = 0;
-        let maxReconnectAttempts = 3;
-        let isReconnecting = false;
+        let wsReconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 5;
+        const RECONNECT_DELAY = 2000; // 2 seconds
         let wsConnected = false;
 
         const showServerLogs = document.getElementById('showServerLogs');
@@ -1149,7 +1258,6 @@
         const showWarning = document.getElementById('showWarning');
         const showError = document.getElementById('showError');
         const logSearch = document.getElementById('logSearch');
-        const clearSearch = document.getElementById('clearSearch');
         let logEntries = [];
 
         // Helper function to format timestamps
@@ -1295,6 +1403,11 @@
             }, 1000);
         }
 
+        // Helper function to generate a unique client ID
+        function generateClientId() {
+            return 'client_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        }
+
         async function startListening() {
             try {
                 addLogEntry('Starting audio capture...');
@@ -1303,48 +1416,71 @@
                     audioStream.getTracks().forEach(track => track.stop());
                 }
 
-                // First create the audio context with the desired sample rate
-                audioContext = new AudioContext({
-                    sampleRate: 16000,
-                    latencyHint: 'interactive'
+                // Close existing audio context if it exists
+                if (audioContext) {
+                    await audioContext.close();
+                }
+
+                // Get the media stream with explicit sample rate
+                audioStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 16000 // Force 16kHz sample rate
+                    } 
                 });
 
+                // Get the actual sample rate from the audio track
+                const audioTrack = audioStream.getAudioTracks()[0];
+                const settings = audioTrack.getSettings();
+                const sampleRate = settings.sampleRate || 16000;
+                
+                addLogEntry(`Audio track sample rate: ${sampleRate}`);
+
+                // Create audio context with matching sample rate
+                audioContext = new AudioContext({
+                    sampleRate: sampleRate,
+                    latencyHint: 'interactive'
+                });
+                
                 // Ensure the audio context is running
                 if (audioContext.state === 'suspended') {
                     await audioContext.resume();
                 }
 
-                // Then get the media stream with matching constraints
-                audioStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        channelCount: 1,
-                        sampleRate: audioContext.sampleRate,
-                        sampleSize: 16,
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    } 
-                });
-                
-                mediaRecorder = new MediaRecorder(audioStream, {
-                    mimeType: 'audio/webm',
-                    audioBitsPerSecond: audioContext.sampleRate
-                });
-                
-                addLogEntry(`Audio capture initialized with sample rate: ${audioContext.sampleRate}`);
-                
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    await initWebSocket();
-                }
+                // Load and register the audio worklet
+                await audioContext.audioWorklet.addModule('/static/js/audio-processor.js');
 
+                // Create and connect the audio nodes
                 source = audioContext.createMediaStreamSource(audioStream);
                 gainNode = audioContext.createGain();
                 gainNode.gain.value = parseFloat(audioGain.value);
                 analyser = audioContext.createAnalyser();
                 analyser.fftSize = 2048;
 
+                // Create and connect the audio worklet node
+                const workletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+                
+                // Handle audio data from the worklet
+                workletNode.port.onmessage = (event) => {
+                    if (event.data.type === 'audio' && ws && ws.readyState === WebSocket.OPEN && wsConnected) {
+                        ws.send(event.data.data);
+                    }
+                };
+
+                // Connect the audio graph
                 source.connect(gainNode);
                 gainNode.connect(analyser);
+                analyser.connect(workletNode);
+                workletNode.connect(audioContext.destination);
+
+                addLogEntry(`Audio capture initialized with sample rate: ${audioContext.sampleRate}`);
+                
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    await initWebSocket();
+                }
                 
                 const bufferLength = analyser.frequencyBinCount;
                 const dataArray = new Uint8Array(bufferLength);
@@ -1376,37 +1512,13 @@
                     
                     requestAnimationFrame(updateVolume);
                 }
-                
-                mediaRecorder.ondataavailable = async (event) => {
-                    if (ws && ws.readyState === WebSocket.OPEN && wsConnected) {
-                        try {
-                            const reader = new FileReader();
-                            reader.onload = async () => {
-                                if (ws.readyState === WebSocket.OPEN && wsConnected) {
-                                    try {
-                                        await ws.send(reader.result);
-                                    } catch (error) {
-                                        addLogEntry(`Error sending audio data: ${error}`, true);
-                                        if (!isReconnecting) {
-                                            handleWebSocketError();
-                                        }
-                                    }
-                                }
-                            };
-                            reader.readAsArrayBuffer(event.data);
-                        } catch (error) {
-                            addLogEntry(`Error processing audio data: ${error}`, true);
-                        }
-                    }
-                };
 
-                mediaRecorder.start(500);
                 isListening = true;
                 status.textContent = calibrationMode ? 'Calibrating...' : 'Listening...';
                 startButton.disabled = true;
                 stopButton.disabled = false;
                 
-                addLogEntry('Started listening with high-quality audio');
+                addLogEntry('Started listening');
                 updateVolume();
             } catch (error) {
                 console.error('Error starting audio:', error);
@@ -1417,61 +1529,83 @@
         }
 
         async function initWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                return;
+            }
+
+            const clientId = generateClientId();
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/${clientId}`;
+
             try {
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const clientId = 'user-' + Math.random().toString(36).substr(2, 9);
-                const wsUrl = `${protocol}//${window.location.host}/ws/${clientId}`;
-                
                 ws = new WebSocket(wsUrl);
                 
                 ws.onopen = () => {
+                    addLogEntry('WebSocket connected');
                     wsConnected = true;
-                    addLogEntry('WebSocket connected', false, 'client', 'INFO');
-                    // Send initial config
-                    if (ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'config',
-                            data: {
-                                sensitivity: parseFloat(sensitivity.value),
-                                noiseThreshold: parseFloat(noiseThreshold.value)
-                            }
-                        }));
-                    }
+                    wsReconnectAttempts = 0;
+                    
+                    // Send initial configuration
+                    ws.send(JSON.stringify({
+                        type: 'config',
+                        sensitivity: parseFloat(sensitivity.value),
+                        noiseThreshold: parseFloat(noiseThreshold.value)
+                    }));
                 };
 
-                ws.onclose = (event) => {
-                    addLogEntry(`WebSocket disconnected (${event.code}: ${event.reason || 'No reason'})`, false, 'client', 'INFO');
-                    ws = null;
-                    // Attempt to reconnect after 2 seconds
-                    setTimeout(initWebSocket, 2000);
+                ws.onclose = async (event) => {
+                    wsConnected = false;
+                    addLogEntry(`WebSocket disconnected (code: ${event.code})`, true);
+                    
+                    if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        wsReconnectAttempts++;
+                        addLogEntry(`Attempting to reconnect (${wsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+                        await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY));
+                        await initWebSocket();
+                    } else {
+                        addLogEntry('Max reconnection attempts reached. Please refresh the page.', true);
+                        stopListening();
+                    }
                 };
 
                 ws.onerror = (error) => {
-                    addLogEntry(`WebSocket error: ${error}`, true, 'client', 'ERROR');
+                    addLogEntry('WebSocket error occurred', true);
+                    console.error('WebSocket error:', error);
                 };
 
-                ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        
-                        if (data.type === 'log') {
-                            addLogEntry(
-                                data.data.message,
-                                data.data.level === 'ERROR',
-                                'server',
-                                data.data.level
-                            );
-                        } else if (data.type === 'result') {
-                            // Handle other message types as before
-                            // ... existing message handling code ...
-                        }
-                    } catch (error) {
-                        addLogEntry(`Error parsing WebSocket message: ${error}`, true, 'client', 'ERROR');
-                    }
-                };
+                ws.onmessage = handleWebSocketMessage;
+
             } catch (error) {
-                console.error('Error initializing WebSocket:', error);
-                addLogEntry(`Failed to initialize WebSocket: ${error}`, true, 'client', 'ERROR');
+                addLogEntry(`Failed to initialize WebSocket: ${error.message}`, true);
+                throw error;
+            }
+        }
+
+        function handleWebSocketMessage(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.error) {
+                    addLogEntry(`Server error: ${data.error}`, true);
+                    return;
+                }
+
+                switch (data.type) {
+                    case 'wakeword':
+                        handleWakeWordDetection(data);
+                        break;
+                    case 'transcription':
+                        handleTranscription(data);
+                        break;
+                    case 'status':
+                        handleStatusUpdate(data);
+                        break;
+                    default:
+                        console.log('Unknown message type:', data.type);
+                }
+            } catch (error) {
+                addLogEntry(`Error processing message: ${error.message}`, true);
+                console.error('Message processing error:', error);
             }
         }
 
@@ -1700,10 +1834,6 @@
 
         // Add search functionality
         logSearch.addEventListener('input', updateLogDisplay);
-        clearSearch.addEventListener('click', () => {
-            logSearch.value = '';
-            updateLogDisplay();
-        });
 
         // Add this to your existing JavaScript
         document.addEventListener('DOMContentLoaded', () => {
@@ -1762,6 +1892,7 @@
             try {
                 logEntries = [];
                 localStorage.removeItem('voiceLogs');
+                logContainer.innerHTML = ''; // Immediately clear the display
                 updateLogDisplay();
                 addLogEntry('All logs cleared', false, 'client', 'INFO');
             } catch (error) {
