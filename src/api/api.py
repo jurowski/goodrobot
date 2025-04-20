@@ -8,12 +8,13 @@ import io
 import json
 import logging
 import os
+import traceback
+import uuid
 import wave
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
-import uuid
-import traceback
 
 import numpy as np
 import soundfile as sf
@@ -22,27 +23,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, field_validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.websockets import WebSocketDisconnect
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from src.api.routes import research
-from src.api.database.research_db import ResearchDatabase
-from motor.motor_asyncio import AsyncIOMotorClient
 
+from src.api.database.research_db import ResearchDatabase
+from src.api.routes import research
+from src.audio.audio_processor import AudioProcessor
 from src.settings import Settings
+from src.utils.logging import websocket_logger
 from src.voice_recognition.speech_to_text import SpeechToText
 from src.voice_recognition.wake_word import WakeWordDetector
-from src.utils.logging import websocket_logger
-from src.audio.audio_processor import AudioProcessor
-
-from contextlib import asynccontextmanager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 # Create FastAPI app
 @asynccontextmanager
@@ -53,6 +53,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     app.mongodb_client.close()
+
 
 app = FastAPI(
     title="GoodRobot API",
@@ -105,18 +106,18 @@ class SiteCreate(BaseModel):
     description: str
     port: int
 
-    @field_validator('port')
+    @field_validator("port")
     @classmethod
     def validate_port(cls, v):
         if v < 1024 or v > 65535:
-            raise ValueError('Port number must be between 1024 and 65535')
+            raise ValueError("Port number must be between 1024 and 65535")
         return v
 
-    @field_validator('domain')
+    @field_validator("domain")
     @classmethod
     def validate_domain(cls, v):
         if not v or len(v) > 255:
-            raise ValueError('Domain must be between 1 and 255 characters')
+            raise ValueError("Domain must be between 1 and 255 characters")
         return v
 
 
@@ -193,36 +194,35 @@ class CustomHTTPException(HTTPException):
 
 @app.post("/voice")
 @limiter.limit("10/minute")
-async def process_voice(request: Request, audio: UploadFile = File(...), language: str = Form(...)):
+async def process_voice(
+    request: Request, audio: UploadFile = File(...), language: str = Form(...)
+):
     try:
         contents = await audio.read()
         if not contents:
             raise CustomHTTPException(
                 status_code=400,
                 detail="Empty audio file",
-                log_message="Received empty audio file"
+                log_message="Received empty audio file",
             )
-            
+
         # Process audio data
         audio_array = np.frombuffer(contents, dtype=np.int16)
         wake_word_detected = wake_word_detector.process_audio_chunk(contents)
-        
+
         if not wake_word_detected:
             return {"wake_word_detected": False}
-            
+
         transcription = await speech_to_text.transcribe_audio(contents)
-        return {
-            "wake_word_detected": True,
-            "transcription": transcription
-        }
-            
+        return {"wake_word_detected": True, "transcription": transcription}
+
     except CustomHTTPException as e:
         raise e
     except Exception as e:
         raise CustomHTTPException(
             status_code=500,
             detail="Internal server error",
-            log_message=f"Error processing voice: {str(e)}"
+            log_message=f"Error processing voice: {str(e)}",
         )
 
 
@@ -265,38 +265,40 @@ class WebSocketManager:
         self.active_connections: Dict[str, WebSocket] = {}
         self.audio_processors: Dict[str, AudioProcessor] = {}
         self.logger = websocket_logger
-    
+
     async def connect(self, websocket: WebSocket, client_id: str):
         await websocket.accept()
         self.active_connections[client_id] = websocket
         self.audio_processors[client_id] = AudioProcessor()
         self.logger.logger.info(f"Client {client_id} connected")
-        
+
         # Add WebSocket handler for client-specific logging
         ws_handler = self.logger.add_websocket_handler(websocket, client_id)
         return ws_handler
-    
+
     async def disconnect(self, client_id: str, ws_handler=None):
         if client_id in self.active_connections:
             if ws_handler:
                 self.logger.remove_websocket_handler(ws_handler)
-            
+
             # Cleanup resources
             del self.active_connections[client_id]
             if client_id in self.audio_processors:
                 await self.audio_processors[client_id].cleanup()
                 del self.audio_processors[client_id]
-            
+
             self.logger.logger.info(f"Client {client_id} disconnected")
-    
+
     async def send_json_message(self, client_id: str, message: dict):
         """Send a JSON message to a specific client"""
         try:
             if client_id in self.active_connections:
                 await self.active_connections[client_id].send_json(message)
         except Exception as e:
-            self.logger.logger.error(f"Error sending JSON message to client {client_id}: {e}")
-    
+            self.logger.logger.error(
+                f"Error sending JSON message to client {client_id}: {e}"
+            )
+
     async def process_json_message(self, message: dict, client_id: str):
         """Process incoming JSON message from client"""
         try:
@@ -320,10 +322,9 @@ class WebSocketManager:
                 if client_id in self.audio_processors:
                     # Ensure configure is awaited
                     await self.audio_processors[client_id].configure(config)
-                    await self.send_json_message(client_id, {
-                        "type": "config_ack",
-                        "status": "success"
-                    })
+                    await self.send_json_message(
+                        client_id, {"type": "config_ack", "status": "success"}
+                    )
             elif message_type == "command":
                 # Handle command message
                 command = message.get("command")
@@ -339,45 +340,51 @@ class WebSocketManager:
         except Exception as e:
             logger.error(f"Error processing JSON message: {str(e)}")
             logger.error(traceback.format_exc())
-    
+
     async def process_binary_message(self, message: bytes, client_id: str):
         try:
             if client_id not in self.audio_processors:
                 raise ValueError("No audio processor found for client")
-            
+
             processor = self.audio_processors[client_id]
-            
+
             # Process for wake word detection
             audio_array = np.frombuffer(message, dtype=np.int16)
             wake_word_detected = wake_word_detector.process_audio_chunk(audio_array)
-            
+
             if wake_word_detected:
                 self.logger.logger.info(f"Wake word detected for client {client_id}")
                 await self._send_wake_word_detected(client_id)
-            
+
             # Process audio data
             result = await processor.process_audio(message)
-            
+
             # Send processing results
-            await self.active_connections[client_id].send_json({
-                "type": "audio_processed",
-                "data": result,
-                "wake_word_detected": wake_word_detected
-            })
-            
+            await self.active_connections[client_id].send_json(
+                {
+                    "type": "audio_processed",
+                    "data": result,
+                    "wake_word_detected": wake_word_detected,
+                }
+            )
+
         except Exception as e:
-            self.logger.logger.error(f"Error processing binary message from client {client_id}: {e}")
+            self.logger.logger.error(
+                f"Error processing binary message from client {client_id}: {e}"
+            )
             await self._send_error(client_id, "Error processing audio data")
-    
+
     async def _handle_config_message(self, data: dict, client_id: str):
         try:
             if client_id in self.audio_processors:
                 await self.audio_processors[client_id].configure(data.get("config", {}))
                 self.logger.logger.info(f"Updated configuration for client {client_id}")
         except Exception as e:
-            self.logger.logger.error(f"Error configuring audio processor for client {client_id}: {e}")
+            self.logger.logger.error(
+                f"Error configuring audio processor for client {client_id}: {e}"
+            )
             await self._send_error(client_id, "Configuration error")
-    
+
     async def _handle_command_message(self, data: dict, client_id: str):
         try:
             command = data.get("command")
@@ -388,61 +395,72 @@ class WebSocketManager:
                 # Handle stop command
                 pass
             else:
-                self.logger.logger.warning(f"Unknown command from client {client_id}: {command}")
+                self.logger.logger.warning(
+                    f"Unknown command from client {client_id}: {command}"
+                )
         except Exception as e:
-            self.logger.logger.error(f"Error handling command for client {client_id}: {e}")
+            self.logger.logger.error(
+                f"Error handling command for client {client_id}: {e}"
+            )
             await self._send_error(client_id, "Command processing error")
-    
+
     async def _handle_memory_message(self, data: dict, client_id: str):
         try:
             memory = Memory(
-                text=data.get('text'),
-                timestamp=data.get('timestamp'),
-                tags=data.get('tags', ['user_input', 'direct_memory'])
+                text=data.get("text"),
+                timestamp=data.get("timestamp"),
+                tags=data.get("tags", ["user_input", "direct_memory"]),
             )
             memories.append(memory.dict())
             # Keep only the last 50 memories
             if len(memories) > 50:
                 memories.pop(0)
-            
-            self.logger.logger.info(f"Received memory update from client {client_id}: {memory.text}")
-            
+
+            self.logger.logger.info(
+                f"Received memory update from client {client_id}: {memory.text}"
+            )
+
             # Send updated memories back to client
-            await self.active_connections[client_id].send_json({
-                "type": "memory_update",
-                "memories": memories
-            })
+            await self.active_connections[client_id].send_json(
+                {"type": "memory_update", "memories": memories}
+            )
         except Exception as e:
-            self.logger.logger.error(f"Error handling memory message from client {client_id}: {e}")
+            self.logger.logger.error(
+                f"Error handling memory message from client {client_id}: {e}"
+            )
             await self._send_error(client_id, "Memory processing error")
-    
+
     async def _send_wake_word_detected(self, client_id: str):
         try:
             if client_id in self.active_connections:
-                await self.active_connections[client_id].send_json({
-                    "type": "wake_word",
-                    "wake_word_detected": True
-                })
+                await self.active_connections[client_id].send_json(
+                    {"type": "wake_word", "wake_word_detected": True}
+                )
         except Exception as e:
-            self.logger.logger.error(f"Error sending wake word detection to client {client_id}: {e}")
-    
+            self.logger.logger.error(
+                f"Error sending wake word detection to client {client_id}: {e}"
+            )
+
     async def _send_error(self, client_id: str, message: str):
         try:
             if client_id in self.active_connections:
-                await self.active_connections[client_id].send_json({
-                    "type": "error",
-                    "message": message
-                })
+                await self.active_connections[client_id].send_json(
+                    {"type": "error", "message": message}
+                )
         except Exception as e:
-            self.logger.logger.error(f"Error sending error message to client {client_id}: {e}")
+            self.logger.logger.error(
+                f"Error sending error message to client {client_id}: {e}"
+            )
+
 
 # Initialize WebSocket manager
 websocket_manager = WebSocketManager()
 
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     ws_handler = await websocket_manager.connect(websocket, client_id)
-    
+
     try:
         while True:
             try:
@@ -469,15 +487,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     finally:
         await websocket_manager.disconnect(client_id, ws_handler)
 
+
 @app.websocket("/ws")
 async def websocket_endpoint_general(websocket: WebSocket):
     client_id = f"client_{uuid.uuid4().hex[:8]}"
     await websocket_endpoint(websocket, client_id)
 
+
 @app.websocket("/voice")
 async def websocket_endpoint_voice(websocket: WebSocket):
     client_id = f"voice_{uuid.uuid4().hex[:8]}"
     await websocket_endpoint(websocket, client_id)
+
 
 async def process_audio(audio_array: np.ndarray) -> dict:
     """Process audio data for wake word detection and transcription.
@@ -570,10 +591,8 @@ ensure_directories()
 
 app.include_router(research.router)
 
+
 @app.get("/research")
 async def research_page(request: Request):
     """Render the research page."""
-    return templates.TemplateResponse(
-        "research.html",
-        {"request": request}
-    )
+    return templates.TemplateResponse("research.html", {"request": request})

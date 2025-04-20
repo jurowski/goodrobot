@@ -471,18 +471,51 @@
             gap: 0.5rem;
             justify-content: space-between;
             align-items: center;
-            padding: 0.5rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .log-controls-right {
-            display: flex;
-            gap: 0.5rem;
+            padding: 0.5rem 0;
+            margin: 0;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .search-wrapper {
             flex: 1;
             min-width: 150px;
+            padding-right: 1rem;
+        }
+
+        .log-controls-right {
+            display: flex;
+            gap: 0.25rem;
+            align-items: center;
+            margin-right: 0;
+            padding-right: 0;
+            position: relative;
+            right: 0.75rem;
+        }
+
+        .icon-button {
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            padding: 0.35rem;
+            margin: 0;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+        }
+
+        .icon-button:hover {
+            color: var(--primary-color);
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .icon-button svg {
+            width: 16px;
+            height: 16px;
         }
 
         .search-input {
@@ -503,29 +536,6 @@
 
         .search-input::placeholder {
             color: rgba(255, 255, 255, 0.5);
-        }
-
-        .icon-button {
-            background: transparent;
-            border: none;
-            color: rgba(255, 255, 255, 0.7);
-            cursor: pointer;
-            padding: 0.5rem;
-            border-radius: 4px;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .icon-button:hover {
-            color: var(--primary-color);
-            background: rgba(52, 152, 219, 0.1);
-        }
-
-        .icon-button svg {
-            width: 18px;
-            height: 18px;
         }
 
         .log-filter, .log-level-filter {
@@ -669,7 +679,7 @@
             .logo-container {
                 max-width: min(30vh, 30vw);
             }
-            
+
             .shuffle-button {
                 width: min(32px, 8%);
                 height: min(32px, 8%);
@@ -681,19 +691,19 @@
             .container {
                 gap: 1rem;
             }
-            
+
             .container.settings-collapsed {
                 grid-template-columns: 50px 1fr 300px;
             }
-            
+
             .container.main-collapsed {
                 grid-template-columns: 300px 50px 300px;
             }
-            
+
             .container.logs-collapsed {
                 grid-template-columns: 300px 1fr 50px;
             }
-            
+
             .settings-column.collapsed,
             .main-column.collapsed,
             .logs-column.collapsed {
@@ -706,7 +716,7 @@
             .container {
                 padding: 1rem;
             }
-            
+
             .voice-interface {
                 padding: 1rem;
             }
@@ -941,12 +951,13 @@
             justify-content: space-between;
             align-items: center;
             padding: 0.5rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .log-controls-right {
             display: flex;
             gap: 0.5rem;
+            align-items: center;
         }
 
         .search-input {
@@ -1028,7 +1039,7 @@
             <div class="column-content">
                 <div class="settings">
                     <h3>Voice Settings</h3>
-                    
+
                     <div class="setting-group">
                         <label for="sensitivity">Wake Word Sensitivity:</label>
                         <input type="range" id="sensitivity" min="0" max="1" step="0.1" value="0.5" />
@@ -1212,7 +1223,7 @@
         const volumeLevel = document.getElementById('volumeLevel');
         const darkLogo = document.querySelector('.logo.dark');
         const lightLogo = document.querySelector('.logo.light');
-        const languageSelect = document.getElementById('language');
+        const language = document.getElementById('language');
         const logContainer = document.getElementById('logContainer');
         const sensitivity = document.getElementById('sensitivity');
         const sensitivityValue = document.getElementById('sensitivityValue');
@@ -1259,6 +1270,93 @@
         const showError = document.getElementById('showError');
         const logSearch = document.getElementById('logSearch');
         let logEntries = [];
+
+        // Settings persistence
+        const SETTINGS_KEY = 'voiceInterfaceSettings';
+        
+        // Default settings
+        const DEFAULT_SETTINGS = {
+            sensitivity: 0.5,
+            audioGain: 1.0,
+            noiseThreshold: 0.15,
+            language: 'en-US'
+        };
+
+        // Load settings from localStorage
+        function loadSettings() {
+            try {
+                const savedSettings = localStorage.getItem(SETTINGS_KEY);
+                return savedSettings ? JSON.parse(savedSettings) : DEFAULT_SETTINGS;
+            } catch (error) {
+                console.error('Error loading settings:', error);
+                return DEFAULT_SETTINGS;
+            }
+        }
+
+        // Save settings to localStorage
+        function saveSettings() {
+            const settings = {
+                sensitivity: parseFloat(sensitivity.value),
+                audioGain: parseFloat(audioGain.value),
+                noiseThreshold: parseFloat(noiseThreshold.value),
+                language: language.value
+            };
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        }
+
+        // Initialize settings
+        document.addEventListener('DOMContentLoaded', () => {
+            const settings = loadSettings();
+            
+            // Set initial values
+            sensitivity.value = settings.sensitivity;
+            sensitivityValue.textContent = settings.sensitivity;
+            
+            audioGain.value = settings.audioGain;
+            audioGainValue.textContent = settings.audioGain;
+            
+            noiseThreshold.value = settings.noiseThreshold;
+            noiseThresholdValue.textContent = settings.noiseThreshold;
+            
+            language.value = settings.language;
+
+            // Add event listeners for settings changes
+            sensitivity.addEventListener('input', () => {
+                sensitivityValue.textContent = sensitivity.value;
+                saveSettings();
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'config',
+                        sensitivity: parseFloat(sensitivity.value),
+                        noiseThreshold: parseFloat(noiseThreshold.value)
+                    }));
+                }
+            });
+
+            audioGain.addEventListener('input', () => {
+                audioGainValue.textContent = audioGain.value;
+                if (gainNode) {
+                    gainNode.gain.value = parseFloat(audioGain.value);
+                }
+                saveSettings();
+            });
+
+            noiseThreshold.addEventListener('input', () => {
+                noiseThresholdValue.textContent = noiseThreshold.value;
+                saveSettings();
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'config',
+                        sensitivity: parseFloat(sensitivity.value),
+                        noiseThreshold: parseFloat(noiseThreshold.value)
+                    }));
+                }
+            });
+
+            language.addEventListener('change', () => {
+                saveSettings();
+            });
+        });
 
         // Helper function to format timestamps
         function formatTimestamp(timestamp) {
@@ -1307,7 +1405,7 @@
                     source,
                     level
                 };
-                
+
                 logEntries.push(entry);
                 // Keep only the last 1000 entries to prevent memory issues
                 if (logEntries.length > 1000) {
@@ -1322,44 +1420,44 @@
         function updateLogDisplay() {
             try {
                 logContainer.innerHTML = '';
-                
+
                 const searchTerm = logSearch.value.toLowerCase();
                 const filteredEntries = logEntries.filter(entry => {
                     // Source filter
                     if (entry.source === 'server' && !showServerLogs.checked) return false;
                     if (entry.source === 'client' && !showClientLogs.checked) return false;
-                    
+
                     // Level filter
                     if (entry.level === 'DEBUG' && !showDebug.checked) return false;
                     if (entry.level === 'INFO' && !showInfo.checked) return false;
                     if (entry.level === 'WARNING' && !showWarning.checked) return false;
                     if (entry.level === 'ERROR' && !showError.checked) return false;
-                    
+
                     // Search filter
                     if (searchTerm && !entry.message.toLowerCase().includes(searchTerm)) return false;
-                    
+
                     return true;
                 });
 
                 filteredEntries.forEach(entry => {
                     const entryElement = document.createElement('div');
                     entryElement.className = `log-entry ${entry.source} ${entry.level.toLowerCase()}`;
-                    
+
                     const timestamp = document.createElement('span');
                     timestamp.className = 'log-timestamp';
                     timestamp.textContent = formatTimestamp(entry.timestamp);
-                    
+
                     const source = document.createElement('span');
                     source.className = 'log-source';
                     source.textContent = `[${entry.source}]`;
-                    
+
                     const level = document.createElement('span');
                     level.className = `log-level ${entry.level.toLowerCase()}`;
                     level.textContent = entry.level;
-                    
+
                     const messageSpan = document.createElement('span');
                     messageSpan.className = 'log-message';
-                    
+
                     if (searchTerm && entry.message) {
                         const message = entry.message.toString();
                         const index = message.toLowerCase().indexOf(searchTerm);
@@ -1374,12 +1472,12 @@
                     } else {
                         messageSpan.textContent = entry.message || '';
                     }
-                    
+
                     entryElement.appendChild(timestamp);
                     entryElement.appendChild(source);
                     entryElement.appendChild(level);
                     entryElement.appendChild(messageSpan);
-                    
+
                     logContainer.appendChild(entryElement);
                 });
 
@@ -1409,107 +1507,92 @@
         }
 
         async function startListening() {
-            try {
-                addLogEntry('Starting audio capture...');
-                
-                if (audioStream) {
-                    audioStream.getTracks().forEach(track => track.stop());
-                }
+            if (isListening) return;
 
-                // Close existing audio context if it exists
+            try {
+                await initWebSocket();
+
+                // Close any existing audio context
                 if (audioContext) {
                     await audioContext.close();
                 }
 
-                // Get the audio stream first without specifying sample rate
-                audioStream = await navigator.mediaDevices.getUserMedia({ 
+                // First get the audio stream to check its sample rate
+                audioStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         channelCount: 1,
                         echoCancellation: true,
                         noiseSuppression: true,
                         autoGainControl: true
-                    } 
+                    }
                 });
 
                 // Create a temporary audio context to detect the stream's sample rate
                 const tempContext = new AudioContext();
                 const tempSource = tempContext.createMediaStreamSource(audioStream);
-                const detectedSampleRate = tempContext.sampleRate;
+                const streamSampleRate = tempContext.sampleRate;
                 tempSource.disconnect();
                 await tempContext.close();
 
-                addLogEntry(`Detected audio stream sample rate: ${detectedSampleRate}Hz`);
-
-                // Create the main audio context with the detected sample rate
+                // Create main AudioContext with the stream's sample rate
                 audioContext = new AudioContext({
-                    sampleRate: detectedSampleRate,
-                    latencyHint: 'interactive'
+                    sampleRate: streamSampleRate
                 });
-                
-                // Ensure the audio context is running
-                if (audioContext.state === 'suspended') {
-                    await audioContext.resume();
-                }
 
-                // Create and connect the audio nodes
+                // Create and connect audio nodes
                 source = audioContext.createMediaStreamSource(audioStream);
                 gainNode = audioContext.createGain();
                 gainNode.gain.value = parseFloat(audioGain.value);
                 analyser = audioContext.createAnalyser();
-                analyser.fftSize = 2048;
+                analyser.fftSize = 256;
+                bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
 
-                // Load and register the audio worklet
+                // Connect the audio processing chain
+                source.connect(gainNode);
+                gainNode.connect(analyser);
+
+                // Load and connect the audio worklet
                 await audioContext.audioWorklet.addModule('/static/js/audio-processor.js');
-
-                // Create and connect the audio worklet node with target sample rate
                 const workletNode = new AudioWorkletNode(audioContext, 'audio-processor', {
                     processorOptions: {
-                        sampleRate: detectedSampleRate,
+                        sampleRate: streamSampleRate,
                         targetSampleRate: 16000,
                         bufferSize: 512
                     }
                 });
 
-                // Connect the audio nodes
-                source.connect(gainNode);
-                gainNode.connect(analyser);
                 gainNode.connect(workletNode);
                 workletNode.connect(audioContext.destination);
 
-                addLogEntry(`Audio capture initialized with sample rate: ${detectedSampleRate}Hz`);
-                
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    await initWebSocket();
+                // Handle audio processing messages
+                workletNode.port.onmessage = (event) => {
+                    if (event.data.type === 'audio' && ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(event.data.data);
+                    }
+                };
+
+                // Start audio context if it's not running
+                if (audioContext.state !== 'running') {
+                    await audioContext.resume();
                 }
-                
-                // Send configuration to server
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'config',
-                        config: {
-                            sample_rate: 16000, // Target sample rate for processing
-                            channels: 1,
-                            buffer_size: 512
-                        }
-                    }));
-                }
-                
+
                 const bufferLength = analyser.frequencyBinCount;
                 const dataArray = new Uint8Array(bufferLength);
-                
+
                 function updateVolume() {
                     if (!isListening) return;
-                    
+
                     analyser.getByteFrequencyData(dataArray);
                     const average = dataArray.reduce((a, b) => a + b) / bufferLength;
                     const volume = Math.min(100, Math.max(0, (average / 255) * 100));
                     volumeLevel.style.width = `${volume}%`;
-                    
+
                     const normalizedVolume = volume / 100;
                     const micVisualization = document.querySelector('.mic-visualization');
                     const volumeMeter = document.querySelector('.volume-meter');
                     const logoContainer = document.querySelector('.logo-container');
-                    
+
                     if (normalizedVolume > parseFloat(noiseThreshold.value)) {
                         micVisualization.querySelector('.mic-icon').classList.add('mic-active');
                         volumeMeter.classList.add('active');
@@ -1521,7 +1604,7 @@
                         document.querySelector('.live-transcription').classList.remove('active');
                         logoContainer.classList.remove('listening');
                     }
-                    
+
                     requestAnimationFrame(updateVolume);
                 }
 
@@ -1529,7 +1612,7 @@
                 status.textContent = calibrationMode ? 'Calibrating...' : 'Listening...';
                 startButton.disabled = true;
                 stopButton.disabled = false;
-                
+
                 addLogEntry('Started listening');
                 updateVolume();
             } catch (error) {
@@ -1551,12 +1634,12 @@
 
             try {
                 ws = new WebSocket(wsUrl);
-                
+
                 ws.onopen = () => {
                     addLogEntry('WebSocket connected');
                     wsConnected = true;
                     wsReconnectAttempts = 0;
-                    
+
                     // Send initial configuration
                     const config = {
                         type: 'config',
@@ -1569,7 +1652,7 @@
                 ws.onclose = async (event) => {
                     wsConnected = false;
                     addLogEntry(`WebSocket disconnected (code: ${event.code})`, true, 'client', 'WARNING');
-                    
+
                     if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                         wsReconnectAttempts++;
                         addLogEntry(`Attempting to reconnect (${wsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, false, 'client', 'INFO');
@@ -1608,7 +1691,7 @@
                     addLogEntry('Received unknown message type', true, 'client', 'ERROR');
                     return;
                 }
-                
+
                 if (data.error) {
                     addLogEntry(`Server error: ${data.error}`, true, 'client', 'ERROR');
                     return;
@@ -1640,7 +1723,7 @@
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
-            
+
             // Stop all tracks in the audio stream
             if (audioStream) {
                 audioStream.getTracks().forEach(track => {
@@ -1711,11 +1794,11 @@
             // Reset transcription and response areas
             transcription.textContent = '';
             response.textContent = '';
-            
+
             wsConnected = false;
             isReconnecting = false;
             reconnectAttempts = 0;
-            
+
             addLogEntry('Stopped listening and cleaned up all resources');
         }
 
@@ -1730,101 +1813,11 @@
             }
         });
 
-        // Update display values when sliders change
-        sensitivity.addEventListener('input', (e) => {
-            sensitivityValue.textContent = e.target.value;
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'config',
-                    data: { sensitivity: parseFloat(e.target.value) }
-                }));
-            }
-        });
-
-        audioGain.addEventListener('input', (e) => {
-            audioGainValue.textContent = e.target.value;
-            if (source && gainNode) {
-                gainNode.gain.value = parseFloat(e.target.value);
-            }
-        });
-
-        noiseThreshold.addEventListener('input', (e) => {
-            noiseThresholdValue.textContent = e.target.value;
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'config',
-                    data: { noiseThreshold: parseFloat(e.target.value) }
-                }));
-            }
-        });
-
-        startCalibration.addEventListener('click', () => {
-            if (!calibrationMode) {
-                calibrationMode = true;
-                calibrationSamples = [];
-                calibrationStatus.style.display = 'block';
-                startCalibration.textContent = 'Cancel Calibration';
-                progressBar.style.width = '0%';
-                samplesCount.textContent = 'Samples: 0/5';
-                
-                // Start listening if not already
-                if (!isListening) {
-                    startListening();
-                }
-            } else {
-                calibrationMode = false;
-                calibrationStatus.style.display = 'none';
-                startCalibration.textContent = 'Start Calibration';
-                stopCalibration.style.display = 'block';
-            }
-        });
-
-        stopCalibration.addEventListener('click', () => {
-            stopListening();
-            stopCalibration.style.display = 'none';
-        });
-
-        // Update the slider event listeners to use debounced restart
-        sensitivity.addEventListener('change', debouncedRestart);
-        noiseThreshold.addEventListener('change', debouncedRestart);
-
-        // Add copy functionality
-        const copyButton = document.getElementById('copyLogs');
-        const copyFeedback = document.getElementById('copyFeedback');
-
-        copyButton.addEventListener('click', async () => {
-            try {
-                const filteredEntries = logEntries.filter(entry => {
-                    if (entry.source === 'server' && !showServerLogs.checked) return false;
-                    if (entry.source === 'client' && !showClientLogs.checked) return false;
-                    if (entry.level === 'DEBUG' && !showDebug.checked) return false;
-                    if (entry.level === 'INFO' && !showInfo.checked) return false;
-                    if (entry.level === 'WARNING' && !showWarning.checked) return false;
-                    if (entry.level === 'ERROR' && !showError.checked) return false;
-                    return true;
-                });
-
-                const logText = filteredEntries.map(entry => {
-                    return `[${formatTimestamp(entry.timestamp)}] [${entry.source}] [${entry.level}] ${entry.message}`;
-                }).join('\n');
-
-                await navigator.clipboard.writeText(logText);
-                copyFeedback.classList.add('show');
-                setTimeout(() => {
-                    copyFeedback.classList.remove('show');
-                }, 2000);
-
-                addLogEntry('Filtered logs copied to clipboard', false, 'client', 'INFO');
-            } catch (error) {
-                addLogEntry('Failed to copy logs: ' + error.message, true, 'client', 'ERROR');
-            }
-        });
-
         shuffleButton.addEventListener('click', () => {
             shuffleButton.classList.add('rotating');
             currentFaceIndex = (currentFaceIndex + 1) % robotFaces.length;
             robotFace.src = robotFaces[currentFaceIndex];
-            
+
             setTimeout(() => {
                 shuffleButton.classList.remove('rotating');
             }, 500);
@@ -1906,6 +1899,56 @@
                 addLogEntry('Failed to clear logs: ' + error.message, true, 'client', 'ERROR');
             }
         });
+
+        // Add copy logs functionality
+        const copyLogs = document.getElementById('copyLogs');
+        const copyFeedback = document.getElementById('copyFeedback');
+
+        copyLogs.addEventListener('click', () => {
+            try {
+                // Get all visible log entries
+                const visibleEntries = logEntries.filter(entry => {
+                    // Source filter
+                    if (entry.source === 'server' && !showServerLogs.checked) return false;
+                    if (entry.source === 'client' && !showClientLogs.checked) return false;
+
+                    // Level filter
+                    if (entry.level === 'DEBUG' && !showDebug.checked) return false;
+                    if (entry.level === 'INFO' && !showInfo.checked) return false;
+                    if (entry.level === 'WARNING' && !showWarning.checked) return false;
+                    if (entry.level === 'ERROR' && !showError.checked) return false;
+
+                    // Search filter
+                    const searchTerm = logSearch.value.toLowerCase();
+                    if (searchTerm && !entry.message.toLowerCase().includes(searchTerm)) return false;
+
+                    return true;
+                });
+
+                // Format logs for copying
+                const formattedLogs = visibleEntries.map(entry => {
+                    const timestamp = formatTimestamp(entry.timestamp);
+                    return `[${timestamp}] [${entry.source}] [${entry.level}] ${entry.message}`;
+                }).join('\n');
+
+                // Copy to clipboard
+                navigator.clipboard.writeText(formattedLogs).then(() => {
+                    // Show feedback
+                    copyFeedback.style.display = 'block';
+                    setTimeout(() => {
+                        copyFeedback.style.display = 'none';
+                    }, 2000);
+                    
+                    addLogEntry('Logs copied to clipboard', false, 'client', 'INFO');
+                }).catch(err => {
+                    console.error('Failed to copy logs:', err);
+                    addLogEntry('Failed to copy logs: ' + err.message, true, 'client', 'ERROR');
+                });
+            } catch (error) {
+                console.error('Error copying logs:', error);
+                addLogEntry('Failed to copy logs: ' + error.message, true, 'client', 'ERROR');
+            }
+        });
     </script>
 </body>
-</html> 
+</html>

@@ -102,10 +102,7 @@ class AudioProcessor:
         """
         try:
             if not self._is_running:
-                return {
-                    "status": "error",
-                    "error": "Audio processor is not running"
-                }
+                return {"status": "error", "error": "Audio processor is not running"}
 
             # Process the audio data
             processed_data = self.process(audio_data)
@@ -118,21 +115,14 @@ class AudioProcessor:
                 "peak_amplitude": float(np.max(np.abs(audio_array))),
                 "rms": float(np.sqrt(np.mean(audio_array**2))),
                 "duration": len(audio_array) / self.config.sample_rate,
-                "processed_chunks": self._processed_chunks
+                "processed_chunks": self._processed_chunks,
             }
 
-            return {
-                "status": "success",
-                "data": processed_data,
-                "metrics": metrics
-            }
+            return {"status": "success", "data": processed_data, "metrics": metrics}
 
         except Exception as e:
             logger.error("Error processing audio: %s", str(e))
-            return {
-                "status": "error",
-                "error": str(e)
-            }
+            return {"status": "error", "error": str(e)}
 
     def _validate_config(self) -> None:
         """Validate audio configuration parameters."""

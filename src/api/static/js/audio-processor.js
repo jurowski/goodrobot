@@ -34,19 +34,19 @@ class AudioProcessor extends AudioWorkletProcessor {
         // Calculate RMS (volume level)
         const sumSquares = inputData.reduce((sum, sample) => sum + sample * sample, 0);
         const rms = Math.sqrt(sumSquares / inputData.length);
-        
+
         // Calculate peak amplitude
         const peak = Math.max(...inputData.map(Math.abs));
-        
+
         // Count clipped samples
         const clipped = inputData.filter(sample => Math.abs(sample) > this.CLIPPING_THRESHOLD).length;
-        
+
         // Check for silence
         const isSilent = rms < this.SILENCE_THRESHOLD;
-        
+
         // Calculate noise floor (in dB)
         const noiseFloor = 20 * Math.log10(Math.min(...inputData.map(Math.abs).filter(x => x > 0)) || 0.000001);
-        
+
         // Calculate SNR
         const signalPower = sumSquares / inputData.length;
         const noisePower = isSilent ? signalPower : Math.pow(10, noiseFloor / 10);
@@ -97,7 +97,7 @@ class AudioProcessor extends AudioWorkletProcessor {
         if (!input || !input.length) return true;
 
         const inputData = input[0];
-        
+
         // Add incoming data to resample buffer
         for (let i = 0; i < inputData.length; i++) {
             this.resampleBuffer[this.resampleIndex++] = inputData[i];
@@ -107,7 +107,7 @@ class AudioProcessor extends AudioWorkletProcessor {
         if (this.resampleIndex >= this.bufferSize * this.resampleRatio) {
             // Resample the audio
             const resampledData = this.resample(this.resampleBuffer.slice(0, this.resampleIndex));
-            
+
             // Process resampled data in chunks
             for (let i = 0; i < resampledData.length; i++) {
                 if (this.bufferIndex < this.bufferSize) {
@@ -139,7 +139,7 @@ class AudioProcessor extends AudioWorkletProcessor {
         // Update audio quality metrics periodically
         if (currentTime - this.metrics.lastUpdate >= this.METRICS_UPDATE_INTERVAL / 1000) {
             const newMetrics = this.calculateMetrics(inputData);
-            
+
             // Update running metrics
             this.metrics.rms = newMetrics.rms;
             this.metrics.peak = newMetrics.peak;
@@ -168,4 +168,4 @@ class AudioProcessor extends AudioWorkletProcessor {
     }
 }
 
-registerProcessor('audio-processor', AudioProcessor); 
+registerProcessor('audio-processor', AudioProcessor);
