@@ -30,6 +30,8 @@ torch>=2.0.1
 # Testing
 pytest>=7.0.0
 pytest-cov>=4.1.0
+pytest-asyncio>=0.23.0  # For async test support
+pytest-playwright>=0.7.0  # For end-to-end testing
 
 pytest==8.0.0
 openai>=1.12.0

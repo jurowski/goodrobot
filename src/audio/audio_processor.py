@@ -39,7 +39,100 @@ class AudioProcessor:
         self.config = config or AudioConfig()
         self._validate_config()
         self._reset_state()
+        self._is_running = False
         logger.debug("AudioProcessor initialized with config: %s", self.config)
+
+    async def start(self) -> None:
+        """Start audio processing."""
+        try:
+            self._is_running = True
+            self._reset_state()
+            logger.info("Audio processor started")
+        except Exception as e:
+            logger.error("Error starting audio processor: %s", str(e))
+            raise
+
+    async def stop(self) -> None:
+        """Stop audio processing."""
+        try:
+            self._is_running = False
+            self._reset_state()
+            logger.info("Audio processor stopped")
+        except Exception as e:
+            logger.error("Error stopping audio processor: %s", str(e))
+            raise
+
+    async def configure(self, config: Dict[str, Any]) -> None:
+        """Configure the audio processor with new settings.
+
+        Args:
+            config: Dictionary of configuration parameters
+        """
+        try:
+            # Update configuration
+            if "sample_rate" in config:
+                self.config.sample_rate = int(config["sample_rate"])
+            if "channels" in config:
+                self.config.channels = int(config["channels"])
+            if "sample_width" in config:
+                self.config.sample_width = int(config["sample_width"])
+            if "chunk_size" in config:
+                self.config.chunk_size = int(config["chunk_size"])
+            if "noise_threshold" in config:
+                self.config.noise_threshold = float(config["noise_threshold"])
+            if "normalize_target" in config:
+                self.config.normalize_target = float(config["normalize_target"])
+
+            # Validate updated configuration
+            self._validate_config()
+            logger.info("Audio processor configuration updated: %s", self.config)
+
+        except Exception as e:
+            logger.error("Error configuring audio processor: %s", str(e))
+            raise
+
+    async def process_audio(self, audio_data: bytes) -> Dict[str, Any]:
+        """Process audio data and return results.
+
+        Args:
+            audio_data: Raw audio bytes to process
+
+        Returns:
+            Dictionary containing processing results
+        """
+        try:
+            if not self._is_running:
+                return {
+                    "status": "error",
+                    "error": "Audio processor is not running"
+                }
+
+            # Process the audio data
+            processed_data = self.process(audio_data)
+
+            # Convert to numpy array for analysis
+            audio_array = np.frombuffer(processed_data, dtype=np.int16)
+
+            # Calculate metrics
+            metrics = {
+                "peak_amplitude": float(np.max(np.abs(audio_array))),
+                "rms": float(np.sqrt(np.mean(audio_array**2))),
+                "duration": len(audio_array) / self.config.sample_rate,
+                "processed_chunks": self._processed_chunks
+            }
+
+            return {
+                "status": "success",
+                "data": processed_data,
+                "metrics": metrics
+            }
+
+        except Exception as e:
+            logger.error("Error processing audio: %s", str(e))
+            return {
+                "status": "error",
+                "error": str(e)
+            }
 
     def _validate_config(self) -> None:
         """Validate audio configuration parameters."""
@@ -270,7 +363,7 @@ class AudioProcessor:
             logger.error("Failed to load WAV file: %s", str(e))
             raise
 
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         """Clean up resources."""
         self._reset_state()
         logger.debug("AudioProcessor cleaned up")

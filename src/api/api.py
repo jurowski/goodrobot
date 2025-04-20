@@ -12,6 +12,8 @@ import wave
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
+import uuid
+import traceback
 
 import numpy as np
 import soundfile as sf
@@ -20,14 +22,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.websockets import WebSocketDisconnect
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from .routes import research
-from .database.research_db import ResearchDatabase
+from src.api.routes import research
+from src.api.database.research_db import ResearchDatabase
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from src.settings import Settings
@@ -36,15 +38,27 @@ from src.voice_recognition.wake_word import WakeWordDetector
 from src.utils.logging import websocket_logger
 from src.audio.audio_processor import AudioProcessor
 
+from contextlib import asynccontextmanager
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    app.mongodb_client = AsyncIOMotorClient("mongodb://localhost:27017")
+    app.research_db = ResearchDatabase(app.mongodb_client)
+    yield
+    # Shutdown
+    app.mongodb_client.close()
+
 app = FastAPI(
     title="GoodRobot API",
     description="API for GoodRobot voice AI assistant",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Initialize rate limiter
@@ -91,13 +105,15 @@ class SiteCreate(BaseModel):
     description: str
     port: int
 
-    @validator('port')
+    @field_validator('port')
+    @classmethod
     def validate_port(cls, v):
         if v < 1024 or v > 65535:
             raise ValueError('Port number must be between 1024 and 65535')
         return v
 
-    @validator('domain')
+    @field_validator('domain')
+    @classmethod
     def validate_domain(cls, v):
         if not v or len(v) > 255:
             raise ValueError('Domain must be between 1 and 255 characters')
@@ -273,26 +289,56 @@ class WebSocketManager:
             
             self.logger.logger.info(f"Client {client_id} disconnected")
     
-    async def process_json_message(self, message: str, client_id: str):
+    async def send_json_message(self, client_id: str, message: dict):
+        """Send a JSON message to a specific client"""
         try:
-            data = json.loads(message)
-            self.logger.logger.debug(f"Received JSON message from client {client_id}: {data}")
-            
-            # Process JSON message based on type
-            message_type = data.get("type")
-            if message_type == "config":
-                await self._handle_config_message(data, client_id)
-            elif message_type == "command":
-                await self._handle_command_message(data, client_id)
-            else:
-                self.logger.logger.warning(f"Unknown message type from client {client_id}: {message_type}")
-                
-        except json.JSONDecodeError as e:
-            self.logger.logger.error(f"Invalid JSON from client {client_id}: {e}")
-            await self._send_error(client_id, "Invalid JSON format")
+            if client_id in self.active_connections:
+                await self.active_connections[client_id].send_json(message)
         except Exception as e:
-            self.logger.logger.error(f"Error processing JSON message from client {client_id}: {e}")
-            await self._send_error(client_id, "Internal server error")
+            self.logger.logger.error(f"Error sending JSON message to client {client_id}: {e}")
+    
+    async def process_json_message(self, message: dict, client_id: str):
+        """Process incoming JSON message from client"""
+        try:
+            if client_id not in self.active_connections:
+                logger.warning(f"Received message for unknown client: {client_id}")
+                return
+
+            # Message is already parsed, no need to load it again
+            if not isinstance(message, dict):
+                logger.error(f"Invalid message format: {type(message)}")
+                return
+
+            message_type = message.get("type")
+            if not message_type:
+                logger.error("Message missing type field")
+                return
+
+            if message_type == "config":
+                # Handle configuration message
+                config = message.get("config", {})
+                if client_id in self.audio_processors:
+                    # Ensure configure is awaited
+                    await self.audio_processors[client_id].configure(config)
+                    await self.send_json_message(client_id, {
+                        "type": "config_ack",
+                        "status": "success"
+                    })
+            elif message_type == "command":
+                # Handle command message
+                command = message.get("command")
+                if command == "start":
+                    if client_id in self.audio_processors:
+                        await self.audio_processors[client_id].start()
+                elif command == "stop":
+                    if client_id in self.audio_processors:
+                        await self.audio_processors[client_id].stop()
+            else:
+                logger.warning(f"Unknown message type: {message_type}")
+
+        except Exception as e:
+            logger.error(f"Error processing JSON message: {str(e)}")
+            logger.error(traceback.format_exc())
     
     async def process_binary_message(self, message: bytes, client_id: str):
         try:
@@ -300,11 +346,23 @@ class WebSocketManager:
                 raise ValueError("No audio processor found for client")
             
             processor = self.audio_processors[client_id]
+            
+            # Process for wake word detection
+            audio_array = np.frombuffer(message, dtype=np.int16)
+            wake_word_detected = wake_word_detector.process_audio_chunk(audio_array)
+            
+            if wake_word_detected:
+                self.logger.logger.info(f"Wake word detected for client {client_id}")
+                await self._send_wake_word_detected(client_id)
+            
+            # Process audio data
             result = await processor.process_audio(message)
             
+            # Send processing results
             await self.active_connections[client_id].send_json({
                 "type": "audio_processed",
-                "data": result
+                "data": result,
+                "wake_word_detected": wake_word_detected
             })
             
         except Exception as e:
@@ -335,6 +393,39 @@ class WebSocketManager:
             self.logger.logger.error(f"Error handling command for client {client_id}: {e}")
             await self._send_error(client_id, "Command processing error")
     
+    async def _handle_memory_message(self, data: dict, client_id: str):
+        try:
+            memory = Memory(
+                text=data.get('text'),
+                timestamp=data.get('timestamp'),
+                tags=data.get('tags', ['user_input', 'direct_memory'])
+            )
+            memories.append(memory.dict())
+            # Keep only the last 50 memories
+            if len(memories) > 50:
+                memories.pop(0)
+            
+            self.logger.logger.info(f"Received memory update from client {client_id}: {memory.text}")
+            
+            # Send updated memories back to client
+            await self.active_connections[client_id].send_json({
+                "type": "memory_update",
+                "memories": memories
+            })
+        except Exception as e:
+            self.logger.logger.error(f"Error handling memory message from client {client_id}: {e}")
+            await self._send_error(client_id, "Memory processing error")
+    
+    async def _send_wake_word_detected(self, client_id: str):
+        try:
+            if client_id in self.active_connections:
+                await self.active_connections[client_id].send_json({
+                    "type": "wake_word",
+                    "wake_word_detected": True
+                })
+        except Exception as e:
+            self.logger.logger.error(f"Error sending wake word detection to client {client_id}: {e}")
+    
     async def _send_error(self, client_id: str, message: str):
         try:
             if client_id in self.active_connections:
@@ -345,6 +436,7 @@ class WebSocketManager:
         except Exception as e:
             self.logger.logger.error(f"Error sending error message to client {client_id}: {e}")
 
+# Initialize WebSocket manager
 websocket_manager = WebSocketManager()
 
 @app.websocket("/ws/{client_id}")
@@ -353,23 +445,39 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     
     try:
         while True:
-            message = await websocket.receive()
-            
-            if message["type"] == "websocket.disconnect":
-                break
-                
-            if message["type"] == "websocket.receive":
-                if "text" in message:
-                    await websocket_manager.process_json_message(message["text"], client_id)
-                elif "bytes" in message:
-                    await websocket_manager.process_binary_message(message["bytes"], client_id)
-    
+            try:
+                # Try to receive JSON message first
+                data = await websocket.receive_json()
+                # Process the JSON message directly without trying to parse it again
+                await websocket_manager.process_json_message(data, client_id)
+            except json.JSONDecodeError:
+                # If JSON parsing fails, try to receive binary data
+                try:
+                    data = await websocket.receive_bytes()
+                    await websocket_manager.process_binary_message(data, client_id)
+                except WebSocketDisconnect:
+                    break
+                except Exception as e:
+                    logger.error(f"Error receiving data: {str(e)}")
+                    logger.error(traceback.format_exc())
+                    break
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for client {client_id}")
     except Exception as e:
-        websocket_manager.logger.logger.error(f"WebSocket error for client {client_id}: {e}")
-    
+        logger.error(f"Error in WebSocket connection for client {client_id}: {e}")
+        logger.error(traceback.format_exc())
     finally:
         await websocket_manager.disconnect(client_id, ws_handler)
 
+@app.websocket("/ws")
+async def websocket_endpoint_general(websocket: WebSocket):
+    client_id = f"client_{uuid.uuid4().hex[:8]}"
+    await websocket_endpoint(websocket, client_id)
+
+@app.websocket("/voice")
+async def websocket_endpoint_voice(websocket: WebSocket):
+    client_id = f"voice_{uuid.uuid4().hex[:8]}"
+    await websocket_endpoint(websocket, client_id)
 
 async def process_audio(audio_array: np.ndarray) -> dict:
     """Process audio data for wake word detection and transcription.
@@ -469,13 +577,3 @@ async def research_page(request: Request):
         "research.html",
         {"request": request}
     )
-
-# Add MongoDB client to app state
-@app.on_event("startup")
-async def startup_db_client():
-    app.mongodb_client = AsyncIOMotorClient("mongodb://localhost:27017")
-    app.research_db = ResearchDatabase(app.mongodb_client)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    app.mongodb_client.close()

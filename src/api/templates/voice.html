@@ -1421,27 +1421,28 @@
                     await audioContext.close();
                 }
 
-                // Get the media stream with explicit sample rate
+                // Get the audio stream first without specifying sample rate
                 audioStream = await navigator.mediaDevices.getUserMedia({ 
                     audio: {
                         channelCount: 1,
                         echoCancellation: true,
                         noiseSuppression: true,
-                        autoGainControl: true,
-                        sampleRate: 16000 // Force 16kHz sample rate
+                        autoGainControl: true
                     } 
                 });
 
-                // Get the actual sample rate from the audio track
-                const audioTrack = audioStream.getAudioTracks()[0];
-                const settings = audioTrack.getSettings();
-                const sampleRate = settings.sampleRate || 16000;
-                
-                addLogEntry(`Audio track sample rate: ${sampleRate}`);
+                // Create a temporary audio context to detect the stream's sample rate
+                const tempContext = new AudioContext();
+                const tempSource = tempContext.createMediaStreamSource(audioStream);
+                const detectedSampleRate = tempContext.sampleRate;
+                tempSource.disconnect();
+                await tempContext.close();
 
-                // Create audio context with matching sample rate
+                addLogEntry(`Detected audio stream sample rate: ${detectedSampleRate}Hz`);
+
+                // Create the main audio context with the detected sample rate
                 audioContext = new AudioContext({
-                    sampleRate: sampleRate,
+                    sampleRate: detectedSampleRate,
                     latencyHint: 'interactive'
                 });
                 
@@ -1450,9 +1451,6 @@
                     await audioContext.resume();
                 }
 
-                // Load and register the audio worklet
-                await audioContext.audioWorklet.addModule('/static/js/audio-processor.js');
-
                 // Create and connect the audio nodes
                 source = audioContext.createMediaStreamSource(audioStream);
                 gainNode = audioContext.createGain();
@@ -1460,26 +1458,40 @@
                 analyser = audioContext.createAnalyser();
                 analyser.fftSize = 2048;
 
-                // Create and connect the audio worklet node
-                const workletNode = new AudioWorkletNode(audioContext, 'audio-processor');
-                
-                // Handle audio data from the worklet
-                workletNode.port.onmessage = (event) => {
-                    if (event.data.type === 'audio' && ws && ws.readyState === WebSocket.OPEN && wsConnected) {
-                        ws.send(event.data.data);
-                    }
-                };
+                // Load and register the audio worklet
+                await audioContext.audioWorklet.addModule('/static/js/audio-processor.js');
 
-                // Connect the audio graph
+                // Create and connect the audio worklet node with target sample rate
+                const workletNode = new AudioWorkletNode(audioContext, 'audio-processor', {
+                    processorOptions: {
+                        sampleRate: detectedSampleRate,
+                        targetSampleRate: 16000,
+                        bufferSize: 512
+                    }
+                });
+
+                // Connect the audio nodes
                 source.connect(gainNode);
                 gainNode.connect(analyser);
-                analyser.connect(workletNode);
+                gainNode.connect(workletNode);
                 workletNode.connect(audioContext.destination);
 
-                addLogEntry(`Audio capture initialized with sample rate: ${audioContext.sampleRate}`);
+                addLogEntry(`Audio capture initialized with sample rate: ${detectedSampleRate}Hz`);
                 
                 if (!ws || ws.readyState !== WebSocket.OPEN) {
                     await initWebSocket();
+                }
+                
+                // Send configuration to server
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'config',
+                        config: {
+                            sample_rate: 16000, // Target sample rate for processing
+                            channels: 1,
+                            buffer_size: 512
+                        }
+                    }));
                 }
                 
                 const bufferLength = analyser.frequencyBinCount;
@@ -1546,47 +1558,59 @@
                     wsReconnectAttempts = 0;
                     
                     // Send initial configuration
-                    ws.send(JSON.stringify({
+                    const config = {
                         type: 'config',
                         sensitivity: parseFloat(sensitivity.value),
                         noiseThreshold: parseFloat(noiseThreshold.value)
-                    }));
+                    };
+                    ws.send(JSON.stringify(config));
                 };
 
                 ws.onclose = async (event) => {
                     wsConnected = false;
-                    addLogEntry(`WebSocket disconnected (code: ${event.code})`, true);
+                    addLogEntry(`WebSocket disconnected (code: ${event.code})`, true, 'client', 'WARNING');
                     
                     if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                         wsReconnectAttempts++;
-                        addLogEntry(`Attempting to reconnect (${wsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+                        addLogEntry(`Attempting to reconnect (${wsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, false, 'client', 'INFO');
                         await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY));
                         await initWebSocket();
                     } else {
-                        addLogEntry('Max reconnection attempts reached. Please refresh the page.', true);
+                        addLogEntry('Max reconnection attempts reached. Please refresh the page.', true, 'client', 'ERROR');
                         stopListening();
                     }
                 };
 
                 ws.onerror = (error) => {
-                    addLogEntry('WebSocket error occurred', true);
+                    addLogEntry('WebSocket error occurred', true, 'client', 'ERROR');
                     console.error('WebSocket error:', error);
                 };
 
                 ws.onmessage = handleWebSocketMessage;
 
             } catch (error) {
-                addLogEntry(`Failed to initialize WebSocket: ${error.message}`, true);
+                addLogEntry(`Failed to initialize WebSocket: ${error.message}`, true, 'client', 'ERROR');
                 throw error;
             }
         }
 
         function handleWebSocketMessage(event) {
             try {
-                const data = JSON.parse(event.data);
+                let data;
+                if (typeof event.data === 'string') {
+                    data = JSON.parse(event.data);
+                } else if (event.data instanceof ArrayBuffer) {
+                    // Handle binary audio data
+                    const audioData = new Int16Array(event.data);
+                    addLogEntry(`Received audio data: ${audioData.length} samples`, false, 'client', 'DEBUG');
+                    return;
+                } else {
+                    addLogEntry('Received unknown message type', true, 'client', 'ERROR');
+                    return;
+                }
                 
                 if (data.error) {
-                    addLogEntry(`Server error: ${data.error}`, true);
+                    addLogEntry(`Server error: ${data.error}`, true, 'client', 'ERROR');
                     return;
                 }
 
@@ -1600,33 +1624,15 @@
                     case 'status':
                         handleStatusUpdate(data);
                         break;
+                    case 'error':
+                        addLogEntry(`Error from server: ${data.message}`, true, 'client', 'ERROR');
+                        break;
                     default:
-                        console.log('Unknown message type:', data.type);
+                        addLogEntry(`Unknown message type: ${data.type}`, false, 'client', 'WARNING');
                 }
             } catch (error) {
-                addLogEntry(`Error processing message: ${error.message}`, true);
+                addLogEntry(`Error processing message: ${error.message}`, true, 'client', 'ERROR');
                 console.error('Message processing error:', error);
-            }
-        }
-
-        async function handleWebSocketError() {
-            if (isReconnecting) return;
-            
-            isReconnecting = true;
-            reconnectAttempts++;
-            addLogEntry(`Reconnection attempt ${reconnectAttempts}/${maxReconnectAttempts}...`);
-            
-            try {
-                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before reconnecting
-                await initWebSocket();
-            } catch (error) {
-                addLogEntry(`Reconnection failed: ${error}`, true);
-                if (reconnectAttempts >= maxReconnectAttempts) {
-                    stopListening();
-                    addLogEntry('Max reconnection attempts reached. Please try again.', true);
-                }
-            } finally {
-                isReconnecting = false;
             }
         }
 
