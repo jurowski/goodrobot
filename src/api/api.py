@@ -14,13 +14,14 @@ import wave
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import soundfile as sf
+from scipy import signal
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -281,13 +282,25 @@ class WebSocketManager:
             if ws_handler:
                 self.logger.remove_websocket_handler(ws_handler)
 
-            # Cleanup resources
-            del self.active_connections[client_id]
+            # Stop audio processing first
             if client_id in self.audio_processors:
-                await self.audio_processors[client_id].cleanup()
-                del self.audio_processors[client_id]
+                try:
+                    await self.audio_processors[client_id].stop()
+                    await self.audio_processors[client_id].cleanup()
+                except Exception as e:
+                    self.logger.logger.error(f"Error stopping audio processor for client {client_id}: {e}")
+                finally:
+                    del self.audio_processors[client_id]
 
-            self.logger.logger.info(f"Client {client_id} disconnected")
+            # Close WebSocket connection
+            try:
+                await self.active_connections[client_id].close()
+            except Exception as e:
+                self.logger.logger.error(f"Error closing WebSocket for client {client_id}: {e}")
+            finally:
+                del self.active_connections[client_id]
+
+            self.logger.logger.info(f"Client {client_id} disconnected and resources cleaned up")
 
     async def send_json_message(self, client_id: str, message: dict):
         """Send a JSON message to a specific client"""
@@ -325,21 +338,50 @@ class WebSocketManager:
                     await self.send_json_message(
                         client_id, {"type": "config_ack", "status": "success"}
                     )
+            elif message_type == "process_calibration":
+                # Handle calibration samples
+                samples = message.get("samples", [])
+                if not samples:
+                    await self._send_error(client_id, "No calibration samples provided")
+                    return
+                
+                try:
+                    # Add samples to wake word detector
+                    for sample in samples:
+                        wake_word_detector.add_calibration_sample(sample)
+                    
+                    # Send calibration complete message with new settings
+                    await self.send_json_message(
+                        client_id,
+                        {
+                            "type": "calibration_complete",
+                            "sensitivity": wake_word_detector.sensitivity,
+                            "noise_threshold": wake_word_detector.noise_threshold
+                        }
+                    )
+                except Exception as e:
+                    logger.error(f"Error processing calibration samples: {str(e)}")
+                    await self._send_error(client_id, f"Calibration error: {str(e)}")
             elif message_type == "command":
                 # Handle command message
                 command = message.get("command")
                 if command == "start":
                     if client_id in self.audio_processors:
                         await self.audio_processors[client_id].start()
+                        await self.send_json_message(client_id, {"type": "command_ack", "command": "start", "status": "success"})
                 elif command == "stop":
                     if client_id in self.audio_processors:
                         await self.audio_processors[client_id].stop()
+                        await self.send_json_message(client_id, {"type": "command_ack", "command": "stop", "status": "success"})
+                        # Initiate cleanup after stop
+                        await self.disconnect(client_id)
             else:
                 logger.warning(f"Unknown message type: {message_type}")
 
         except Exception as e:
             logger.error(f"Error processing JSON message: {str(e)}")
             logger.error(traceback.format_exc())
+            await self._send_error(client_id, f"Error processing message: {str(e)}")
 
     async def process_binary_message(self, message: bytes, client_id: str):
         try:
@@ -596,3 +638,376 @@ app.include_router(research.router)
 async def research_page(request: Request):
     """Render the research page."""
     return templates.TemplateResponse("research.html", {"request": request})
+
+
+@app.get("/sample-recorder")
+async def sample_recorder(request: Request):
+    """Serve the sample recorder UI"""
+    return templates.TemplateResponse("sample_recorder.html", {"request": request})
+
+
+@app.post("/api/process_sample")
+async def process_sample(request: Request):
+    """Process an audio sample and save it if it contains the wake word"""
+    try:
+        form = await request.form()
+        audio_file = form.get("audio")
+        sample_type = form.get("type", "human")
+        
+        if not audio_file:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "No audio file provided"}
+            )
+        
+        # Read audio data
+        audio_data = await audio_file.read()
+        
+        # Convert to numpy array
+        import numpy as np
+        import soundfile as sf
+        import io
+        from scipy import signal
+        
+        try:
+            # First try reading with soundfile
+            audio_array, sample_rate = sf.read(io.BytesIO(audio_data))
+            logger.info(f"Successfully read audio with soundfile: {sample_rate}Hz")
+        except Exception as e:
+            logger.warning(f"Failed to read with soundfile: {str(e)}, trying ffmpeg conversion")
+            # If soundfile fails, use ffmpeg to convert from webm to wav
+            import subprocess
+            import tempfile
+            
+            # Create temporary files for webm and wav
+            with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as webm_file, \
+                 tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as wav_file:
+                
+                # Write webm data to temp file
+                webm_file.write(audio_data)
+                webm_file.flush()
+                
+                # Convert webm to wav using ffmpeg
+                try:
+                    subprocess.run([
+                        'ffmpeg',
+                        '-i', webm_file.name,
+                        '-acodec', 'pcm_s16le',
+                        '-ar', '16000',
+                        '-ac', '1',
+                        '-f', 'wav',
+                        wav_file.name
+                    ], check=True, capture_output=True)
+                    
+                    # Read the converted wav file
+                    audio_array, sample_rate = sf.read(wav_file.name)
+                    logger.info(f"Successfully converted and read audio: {sample_rate}Hz")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"FFmpeg conversion failed: {e.stderr.decode()}")
+                    raise
+                finally:
+                    # Clean up temp files
+                    import os
+                    os.unlink(webm_file.name)
+                    os.unlink(wav_file.name)
+        
+        # Convert to mono if stereo
+        if len(audio_array.shape) > 1:
+            audio_array = np.mean(audio_array, axis=1)
+        
+        # Convert to int16 for wake word detector
+        audio_array = (audio_array * 32767).astype(np.int16)
+        
+        # Calculate audio quality metrics
+        metrics = calculate_audio_metrics(audio_array, sample_rate)
+        
+        # Process with wake word detector
+        detected = wake_word_detector.process_audio_chunk(audio_array)
+        metrics['wake_word'] = detected
+        
+        # Validate sample
+        validation_result = validate_sample(audio_array, sample_rate, metrics)
+        
+        if validation_result['is_valid']:
+            # Save the sample
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            directory = os.path.join("tests", "audio_samples", "wake_word", sample_type)
+            os.makedirs(directory, exist_ok=True)
+            
+            filename = os.path.join(directory, f"jarvis_{sample_type}_{timestamp}.wav")
+            sf.write(filename, audio_array, sample_rate)
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "message": "Sample saved successfully",
+                    "metrics": metrics
+                }
+            )
+        else:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": validation_result['error'],
+                    "metrics": metrics
+                }
+            )
+            
+    except Exception as e:
+        logger.error(f"Error processing sample: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+def calculate_audio_metrics(audio_array: np.ndarray, sample_rate: int) -> Dict:
+    """Calculate various audio quality metrics."""
+    try:
+        # Normalize audio to [-1, 1]
+        audio_normalized = audio_array / 32767.0
+        
+        # Calculate RMS volume level
+        rms = np.sqrt(np.mean(np.square(audio_normalized)))
+        volume_level = min(100, int(rms * 100))
+        
+        # Calculate signal-to-noise ratio (SNR)
+        # Using a simple method: ratio of mean signal power to bottom 10% of samples
+        signal_power = np.mean(np.square(audio_normalized))
+        noise_threshold = np.percentile(np.abs(audio_normalized), 10)
+        noise_power = np.mean(np.square(audio_normalized[np.abs(audio_normalized) <= noise_threshold]))
+        snr = 10 * np.log10(signal_power / noise_power) if noise_power > 0 else 100
+        
+        # Calculate clarity score based on zero-crossings (rough measure of signal clarity)
+        zero_crossings = np.sum(np.diff(np.signbit(audio_normalized).astype(int)))
+        clarity_score = min(100, int((zero_crossings / len(audio_normalized)) * sample_rate * 0.1))
+        
+        # Detect potential clipping
+        clipping_threshold = 0.95  # 95% of max amplitude
+        clipping_samples = np.sum(np.abs(audio_normalized) > clipping_threshold)
+        clipping_percentage = (clipping_samples / len(audio_normalized)) * 100
+        
+        return {
+            "volume_level": volume_level,  # 0-100
+            "signal_to_noise": min(100, max(0, int(snr))),  # 0-100
+            "clarity": clarity_score,  # 0-100
+            "clipping_percentage": round(clipping_percentage, 2),  # percentage of clipped samples
+            "quality_score": min(100, int((volume_level + min(100, max(0, int(snr))) + clarity_score) / 3))
+        }
+    except Exception as e:
+        logger.error(f"Error calculating audio metrics: {str(e)}")
+        return {
+            "volume_level": 0,
+            "signal_to_noise": 0,
+            "clarity": 0,
+            "clipping_percentage": 0,
+            "quality_score": 0
+        }
+
+def validate_sample(audio_array: np.ndarray, sample_rate: int, metrics: dict) -> dict:
+    """Validate the audio sample against quality criteria"""
+    result = {
+        'is_valid': True,
+        'error': None
+    }
+    
+    # Check duration
+    duration = len(audio_array) / sample_rate
+    if duration < 0.5 or duration > 15.0:
+        result['is_valid'] = False
+        result['error'] = f"Invalid duration: {duration:.2f}s (must be between 0.5s and 15.0s)"
+        return result
+    
+    # Check volume level
+    if metrics['volume_level'] < 10:
+        result['is_valid'] = False
+        result['error'] = "Volume too low"
+        return result
+    
+    # Check noise level
+    if metrics['signal_to_noise'] > 50:
+        result['is_valid'] = False
+        result['error'] = "Too much background noise"
+        return result
+    
+    # Check clarity
+    if metrics['clarity'] < 20:
+        result['is_valid'] = False
+        result['error'] = "Audio not clear enough"
+        return result
+    
+    # Check wake word detection
+    if not metrics['wake_word']:
+        result['is_valid'] = False
+        result['error'] = "Wake word not detected"
+        return result
+    
+    return result
+
+@app.post("/api/save_sample")
+async def save_sample(
+    audio_data: bytes = File(...),
+    sample_type: str = Form(...),
+    timestamp: str = Form(...)
+):
+    try:
+        # Create samples directory if it doesn't exist
+        samples_dir = Path("samples")
+        samples_dir.mkdir(exist_ok=True)
+        
+        # Generate unique filename
+        filename = f"{sample_type}_{timestamp}.wav"
+        file_path = samples_dir / filename
+        
+        # Convert audio data to numpy array for processing
+        audio_array = np.frombuffer(audio_data, dtype=np.int16)
+        sample_rate = 16000  # Standard sample rate
+        
+        # Calculate audio metrics
+        metrics = calculate_audio_metrics(audio_array, sample_rate)
+        
+        # Generate waveform data (downsampled for visualization)
+        waveform = generate_waveform_data(audio_array)
+        
+        # Calculate duration
+        duration = len(audio_array) / sample_rate
+        
+        # Save the audio file
+        with wave.open(str(file_path), 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(audio_array.tobytes())
+        
+        # Save metadata alongside the audio file
+        metadata = {
+            "filename": filename,
+            "type": sample_type,
+            "timestamp": timestamp,
+            "duration": duration,
+            "metrics": metrics,
+            "waveform": waveform.tolist()
+        }
+        
+        metadata_path = file_path.with_suffix('.json')
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f)
+        
+        return {"status": "success", "filename": filename, "metadata": metadata}
+    except Exception as e:
+        logger.error(f"Error saving sample: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+def generate_waveform_data(audio_array: np.ndarray, num_points: int = 100) -> np.ndarray:
+    """Generate downsampled waveform data for visualization."""
+    if len(audio_array) == 0:
+        return np.zeros(num_points)
+    
+    # Normalize audio to [-1, 1]
+    audio_normalized = audio_array / 32767.0
+    
+    # Calculate points per segment
+    points_per_segment = len(audio_array) // num_points
+    
+    if points_per_segment < 1:
+        return np.zeros(num_points)
+    
+    # Calculate min and max for each segment
+    waveform = []
+    for i in range(num_points):
+        start = i * points_per_segment
+        end = start + points_per_segment
+        segment = audio_normalized[start:end]
+        if len(segment) > 0:
+            waveform.append(np.mean(segment))
+        else:
+            waveform.append(0)
+    
+    return np.array(waveform)
+
+@app.get("/api/list_samples")
+async def list_samples():
+    try:
+        samples_dir = Path("samples")
+        if not samples_dir.exists():
+            return {"samples": []}
+        
+        samples = []
+        for wav_file in samples_dir.glob("*.wav"):
+            metadata_file = wav_file.with_suffix('.json')
+            
+            if metadata_file.exists():
+                # Load metadata if it exists
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                samples.append(metadata)
+            else:
+                # Generate basic metadata if no metadata file exists
+                name_parts = wav_file.stem.split("_")
+                sample_type = name_parts[0]
+                timestamp = "_".join(name_parts[1:])
+                
+                # Read audio file for basic metrics
+                with wave.open(str(wav_file), 'rb') as wav:
+                    frames = wav.readframes(wav.getnframes())
+                    audio_array = np.frombuffer(frames, dtype=np.int16)
+                    duration = wav.getnframes() / wav.getframerate()
+                
+                metrics = calculate_audio_metrics(audio_array, wav.getframerate())
+                waveform = generate_waveform_data(audio_array)
+                
+                metadata = {
+                    "filename": wav_file.name,
+                    "type": sample_type,
+                    "timestamp": timestamp,
+                    "duration": duration,
+                    "metrics": metrics,
+                    "waveform": waveform.tolist()
+                }
+                
+                # Save metadata for future use
+                with open(metadata_file, 'w') as f:
+                    json.dump(metadata, f)
+                
+                samples.append(metadata)
+        
+        return {"samples": samples}
+    except Exception as e:
+        logger.error(f"Error listing samples: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/delete_samples")
+async def delete_samples(filenames: List[str]):
+    """Delete multiple samples at once."""
+    try:
+        samples_dir = Path("samples")
+        deleted = []
+        errors = []
+        
+        for filename in filenames:
+            try:
+                wav_file = samples_dir / filename
+                metadata_file = wav_file.with_suffix('.json')
+                
+                if wav_file.exists():
+                    wav_file.unlink()
+                if metadata_file.exists():
+                    metadata_file.unlink()
+                    
+                deleted.append(filename)
+            except Exception as e:
+                errors.append({"filename": filename, "error": str(e)})
+        
+        return {
+            "status": "success",
+            "deleted": deleted,
+            "errors": errors
+        }
+    except Exception as e:
+        logger.error(f"Error deleting samples: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("src.api.api:app", host="0.0.0.0", port=8000, reload=True)

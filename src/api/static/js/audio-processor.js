@@ -1,14 +1,19 @@
 class AudioProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super();
-        this.targetSampleRate = options.processorOptions.targetSampleRate || 16000;
-        this.bufferSize = options.processorOptions.bufferSize || 512;
+        // Always use 16kHz as the target sample rate
+        this.targetSampleRate = 16000;
+        this.sampleRate = options.processorOptions?.sampleRate || 48000;
+        this.bufferSize = options.processorOptions?.bufferSize || 512;
+        
+        // Initialize resampling
+        this.resampleRatio = this.targetSampleRate / this.inputSampleRate;
         this.buffer = new Float32Array(this.bufferSize);
         this.bufferIndex = 0;
-        this.inputSampleRate = options.processorOptions.sampleRate;
-        this.resampleRatio = this.inputSampleRate / this.targetSampleRate;
-        this.lastInputSample = 0;
-        this.resampleBuffer = new Float32Array(this.bufferSize * 3); // Larger buffer for resampling
+        
+        // Calculate resampling buffer size
+        const resampledSize = Math.ceil(this.bufferSize * this.resampleRatio);
+        this.resampleBuffer = new Float32Array(resampledSize * 4);
         this.resampleIndex = 0;
 
         // Audio quality metrics
@@ -65,30 +70,27 @@ class AudioProcessor extends AudioWorkletProcessor {
 
     // Improved resampling using cubic interpolation
     resample(inputData) {
-        const outputLength = Math.floor(inputData.length / this.resampleRatio);
+        const outputLength = Math.ceil(inputData.length * this.resampleRatio);
         const output = new Float32Array(outputLength);
-
+        
         for (let i = 0; i < outputLength; i++) {
-            const inputIndex = i * this.resampleRatio;
-            const intIndex = Math.floor(inputIndex);
-            const fraction = inputIndex - intIndex;
-
-            // Get the four nearest samples for cubic interpolation
-            const y0 = intIndex > 0 ? inputData[intIndex - 1] : 0;
-            const y1 = inputData[intIndex];
-            const y2 = intIndex < inputData.length - 1 ? inputData[intIndex + 1] : 0;
-            const y3 = intIndex < inputData.length - 2 ? inputData[intIndex + 2] : 0;
-
-            // Cubic interpolation
-            const a0 = y3 - y2 - y0 + y1;
-            const a1 = y0 - y1 - a0;
-            const a2 = y2 - y0;
-            const a3 = y1;
-
-            const x = fraction;
-            output[i] = a0 * x * x * x + a1 * x * x + a2 * x + a3;
+            const inputIndex = i / this.resampleRatio;
+            const x = Math.floor(inputIndex);
+            const frac = inputIndex - x;
+            
+            const x0 = x > 0 ? inputData[x - 1] : inputData[0];
+            const x1 = inputData[x];
+            const x2 = x < inputData.length - 1 ? inputData[x + 1] : x1;
+            const x3 = x < inputData.length - 2 ? inputData[x + 2] : x2;
+            
+            const a = 0.5 * (3.0 * (x1 - x2) - x0 + x3);
+            const b = x2 + x0 - 2.0 * x1;
+            const c = 0.5 * (x2 - x0);
+            const d = x1;
+            
+            output[i] = ((a * frac + b) * frac + c) * frac + d;
         }
-
+        
         return output;
     }
 
@@ -97,74 +99,87 @@ class AudioProcessor extends AudioWorkletProcessor {
         if (!input || !input.length) return true;
 
         const inputData = input[0];
-
-        // Add incoming data to resample buffer
-        for (let i = 0; i < inputData.length; i++) {
-            this.resampleBuffer[this.resampleIndex++] = inputData[i];
-        }
-
-        // When we have enough samples, resample and process
-        if (this.resampleIndex >= this.bufferSize * this.resampleRatio) {
-            // Resample the audio
-            const resampledData = this.resample(this.resampleBuffer.slice(0, this.resampleIndex));
-
-            // Process resampled data in chunks
-            for (let i = 0; i < resampledData.length; i++) {
-                if (this.bufferIndex < this.bufferSize) {
-                    this.buffer[this.bufferIndex++] = resampledData[i];
-                }
-
-                // When buffer is full, send it
-                if (this.bufferIndex >= this.bufferSize) {
-                    // Convert to 16-bit PCM at target sample rate
-                    const pcmData = new Int16Array(this.bufferSize);
-                    for (let i = 0; i < this.bufferSize; i++) {
-                        const s = Math.max(-1, Math.min(1, this.buffer[i]));
-                        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-                    }
-
-                    this.port.postMessage({
-                        type: 'audio',
-                        data: pcmData.buffer
-                    }, [pcmData.buffer]);
-
-                    this.bufferIndex = 0;
-                }
-            }
-
-            // Reset resample buffer
-            this.resampleIndex = 0;
-        }
-
-        // Update audio quality metrics periodically
-        if (currentTime - this.metrics.lastUpdate >= this.METRICS_UPDATE_INTERVAL / 1000) {
-            const newMetrics = this.calculateMetrics(inputData);
-
-            // Update running metrics
-            this.metrics.rms = newMetrics.rms;
-            this.metrics.peak = newMetrics.peak;
-            this.metrics.clipCount += newMetrics.clipped;
-            this.metrics.silenceCount += newMetrics.isSilent ? 1 : 0;
-            this.metrics.noiseFloor = newMetrics.noiseFloor;
-            this.metrics.snr = newMetrics.snr;
-            this.metrics.lastUpdate = currentTime;
-
-            // Send metrics to main thread
-            this.port.postMessage({
-                type: 'metrics',
-                data: {
-                    rms: this.metrics.rms,
-                    peak: this.metrics.peak,
-                    clipCount: this.metrics.clipCount,
-                    silenceCount: this.metrics.silenceCount,
-                    noiseFloor: this.metrics.noiseFloor,
-                    snr: this.metrics.snr,
-                    timestamp: currentTime
+        
+        if (this.needsResampling) {
+            // Add new samples to resample buffer
+            inputData.forEach(sample => {
+                if (this.resampleIndex < this.resampleBuffer.length) {
+                    this.resampleBuffer[this.resampleIndex++] = sample;
                 }
             });
+
+            // Process when we have enough samples
+            if (this.resampleIndex >= this.resampleBuffer.length / 2) {
+                const resampledData = this.resample(this.resampleBuffer.slice(0, this.resampleIndex));
+                this.processAudioChunk(resampledData);
+                
+                // Keep remaining samples
+                const remainingSamples = this.resampleBuffer.slice(this.resampleIndex - this.bufferSize);
+                this.resampleBuffer.fill(0);
+                remainingSamples.forEach((sample, i) => this.resampleBuffer[i] = sample);
+                this.resampleIndex = remainingSamples.length;
+            }
+        } else {
+            this.processAudioChunk(inputData);
+        }
+
+        // Update metrics periodically
+        if (currentTime - this.metrics.lastUpdate >= this.METRICS_UPDATE_INTERVAL / 1000) {
+            const newMetrics = this.calculateMetrics(inputData);
+            this.updateMetrics(newMetrics);
         }
 
         return true;
+    }
+
+    processAudioChunk(audioData) {
+        for (let i = 0; i < audioData.length; i++) {
+            if (this.bufferIndex < this.bufferSize) {
+                this.buffer[this.bufferIndex++] = audioData[i];
+            }
+
+            // When buffer is full, send it
+            if (this.bufferIndex >= this.bufferSize) {
+                // Convert to 16-bit PCM
+                const pcmData = new Int16Array(this.bufferSize);
+                for (let j = 0; j < this.bufferSize; j++) {
+                    const s = Math.max(-1, Math.min(1, this.buffer[j]));
+                    pcmData[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+
+                this.port.postMessage({
+                    type: 'audio',
+                    data: pcmData.buffer
+                }, [pcmData.buffer]);
+
+                this.bufferIndex = 0;
+            }
+        }
+    }
+
+    updateMetrics(newMetrics) {
+        // Update running metrics
+        this.metrics.rms = newMetrics.rms;
+        this.metrics.peak = newMetrics.peak;
+        this.metrics.clipCount += newMetrics.clipped;
+        this.metrics.silenceCount += newMetrics.isSilent ? 1 : 0;
+        this.metrics.noiseFloor = newMetrics.noiseFloor;
+        this.metrics.snr = newMetrics.snr;
+        this.metrics.lastUpdate = currentTime;
+
+        // Send metrics to main thread
+        this.port.postMessage({
+            type: 'metrics',
+            data: {
+                rms: this.metrics.rms,
+                peak: this.metrics.peak,
+                clipCount: this.metrics.clipCount,
+                silenceCount: this.metrics.silenceCount,
+                noiseFloor: this.metrics.noiseFloor,
+                snr: this.metrics.snr,
+                timestamp: currentTime
+            }
+        });
     }
 }
 

@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wake Word Sample Recorder</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon/favicon-16x16.png">
+    <link rel="manifest" href="/static/favicon/site.webmanifest">
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --background-color: #1a1a1a;
+            --surface-color: #2d2d2d;
+            --text-color: #e0e0e0;
+            --border-color: #404040;
+            --hover-color: #2980b9;
+            --success-color: #4CAF50;
+            --error-color: #ff6b6b;
+            --muted-text: #a0a0a0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+                Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background: var(--background-color);
+            background-image: url('/static/images/backgrounds/bg-desk-dust-1.jpg');
+            background-position: center center;
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-attachment: fixed;
+            color: var(--text-color);
+            line-height: 1.6;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            flex-shrink: 0;
+            width: 100%;
+            padding: 1rem 2rem;
+            background: var(--surface-color);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            position: relative;
+            z-index: 100;
+        }
+
+        .header-logo {
+            height: 40px;
+            object-fit: contain;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .brain-image {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+        }
+
+        .header-text {
+            color: var(--text-color);
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .nav-link {
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--primary-color);
+        }
+
+        .container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            background: rgba(26, 26, 26, 0.75);
+            backdrop-filter: blur(10px);
+            position: relative;
+            z-index: 1;
+            height: calc(100vh - 5rem);
+            overflow: hidden;
+            margin-bottom: 2rem;
+            min-height: 0;
+        }
+
+        .column {
+            position: relative;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            background: rgba(32, 32, 32, 0.95);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            height: 100%;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .recording {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .quality-metric {
+            transition: all 0.3s ease;
+        }
+
+        .quality-metric.good {
+            color: var(--success-color);
+        }
+
+        .quality-metric.warning {
+            color: #FBBF24;
+        }
+
+        .quality-metric.bad {
+            color: var(--error-color);
+        }
+
+        .metric-card {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .logs-container {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+        }
+
+        .button {
+            padding: 0.75rem 1.5rem;
+            background: var(--primary-color);
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 500;
+            width: 100%;
+            text-align: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            height: 2.75rem;
+        }
+
+        .button:hover {
+            background: var(--hover-color);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .button:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+
+        .button:disabled {
+            background: var(--border-color);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .button.danger {
+            background: var(--error-color);
+        }
+
+        .button.danger:hover {
+            background: #e74c3c;
+        }
+
+        .button.success {
+            background: var(--success-color);
+        }
+
+        .button.success:hover {
+            background: #45a049;
+        }
+
+        .button.warning {
+            background: #FBBF24;
+            color: #1a1a1a;
+        }
+
+        .button.warning:hover {
+            background: #f59e0b;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .controls-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-title::before {
+            content: '';
+            display: block;
+            width: 4px;
+            height: 1.25rem;
+            background: var(--primary-color);
+            border-radius: 2px;
+        }
+
+        .info-text {
+            color: var(--muted-text);
+            font-size: 0.875rem;
+            line-height: 1.5;
+            margin: 1rem 0;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: var(--background-color);
+            border-radius: 2px;
+            margin: 0.75rem 0;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--primary-color);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        /* Custom scrollbar styling */
+        .column::-webkit-scrollbar,
+        .logs-container::-webkit-scrollbar,
+        .main-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .column::-webkit-scrollbar-track,
+        .logs-container::-webkit-scrollbar-track,
+        .main-content::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+
+        .column::-webkit-scrollbar-thumb,
+        .logs-container::-webkit-scrollbar-thumb,
+        .main-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        .column::-webkit-scrollbar-thumb:hover,
+        .logs-container::-webkit-scrollbar-thumb:hover,
+        .main-content::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .sample-list {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .sample-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+
+        .sample-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .sample-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .sample-type {
+            font-size: 0.875rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .sample-type.human {
+            color: var(--primary-color);
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .sample-type.ai {
+            color: var(--success-color);
+            background: rgba(76, 175, 80, 0.1);
+        }
+
+        .sample-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .action-button {
+            padding: 0.25rem;
+            border-radius: 4px;
+            background: none;
+            border: none;
+            color: var(--text-color);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+        }
+
+        .action-button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .action-button.delete:hover {
+            background: rgba(255, 87, 87, 0.1);
+            color: var(--error-color);
+        }
+
+        .action-button.play:hover {
+            background: rgba(52, 152, 219, 0.1);
+            color: var(--primary-color);
+        }
+
+        .sample-timestamp {
+            font-size: 0.75rem;
+            color: var(--muted-text);
+        }
+
+        .no-samples {
+            text-align: center;
+            padding: 2rem;
+            color: var(--muted-text);
+            font-style: italic;
+        }
+
+        .sample-list-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            gap: 1rem;
+        }
+
+        .sort-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .select-control {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+
+        .select-control option {
+            background: var(--surface-color);
+            color: var(--text-color);
+        }
+
+        .waveform-container {
+            height: 40px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+            margin: 0.5rem 0;
+        }
+
+        .waveform-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .quality-indicators {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .quality-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .quality-indicator.good {
+            color: var(--success-color);
+            background: rgba(76, 175, 80, 0.1);
+        }
+
+        .quality-indicator.warning {
+            color: #FBBF24;
+            background: rgba(251, 191, 36, 0.1);
+        }
+
+        .quality-indicator.bad {
+            color: var(--error-color);
+            background: rgba(255, 87, 87, 0.1);
+        }
+
+        .batch-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-control {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            border: 1px solid var(--border-color);
+            background: var(--surface-color);
+            cursor: pointer;
+        }
+
+        .checkbox-control:checked {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .sample-duration {
+            font-size: 0.75rem;
+            color: var(--muted-text);
+            margin-left: auto;
+            padding-left: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-brand">
+            <img src="/static/images/light-mode-brain-2.png" alt="Brain Icon" class="brain-image">
+            <span class="header-text">Good Robot</span>
+        </div>
+        <nav class="nav-links">
+            <a href="http://localhost:3000" class="nav-link" target="_blank" rel="noopener noreferrer">Documentation</a>
+            <a href="http://localhost:8000/redoc" class="nav-link" target="_blank" rel="noopener noreferrer">API Docs</a>
+            <a href="http://localhost:8000/voice" class="nav-link">Voice Interface</a>
+            <a href="/research" class="nav-link">Research</a>
+            <a href="/sample-recorder" class="nav-link">Sample Recorder</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <!-- Logs Section - Left Column -->
+        <div class="column">
+            <h2 class="text-lg font-semibold mb-3 text-gray-200">Live Logs</h2>
+            <div class="logs-container metric-card">
+                <div class="font-mono text-xs">
+                    <div id="logContainer" class="space-y-1 text-gray-300"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content - Right Column -->
+        <div class="column">
+            <div class="main-content">
+                <h1 class="text-2xl font-bold text-center mb-6 text-gray-100">Wake Word Sample Recorder</h1>
+                
+                <!-- Instructions Section -->
+                <div class="mb-6">
+                    <h2 class="section-title">Instructions</h2>
+                    <div class="metric-card">
+                        <p class="text-gray-300 mb-2">Recording workflow:</p>
+                        <ol class="list-decimal pl-5 space-y-1 text-gray-300">
+                            <li>Click "Start Human Recording" to begin recording</li>
+                            <li>Say the wake word ("jarvis") once clearly</li>
+                            <li>Click "Stop Recording" when done</li>
+                            <li>Use "Play Sample" to review your recording</li>
+                            <li>Click "Save Sample" if good, or "Discard Sample" if not</li>
+                            <li>Repeat this process until you have 5 good samples</li>
+                        </ol>
+                        <p class="text-gray-300 mt-3">For AI samples, follow the same process using "Start AI Recording"</p>
+                    </div>
+                </div>
+
+                <!-- Controls Section -->
+                <div class="controls-section">
+                    <h2 class="section-title">Recording Controls</h2>
+                    <div class="controls-grid">
+                        <div class="button-group" style="display: flex; gap: 1rem; width: 100%;">
+                            <button id="recordHuman" class="button flex-1">
+                                Start Human Recording
+                            </button>
+                            <button id="playSample" class="button hidden flex-shrink-0" style="width: auto; padding-left: 2rem; padding-right: 2rem;">
+                                ▶ Play
+                            </button>
+                        </div>
+                        <div class="button-group" style="display: flex; gap: 1rem; width: 100%;">
+                            <button id="recordAI" class="button success flex-1">
+                                Start AI Recording
+                            </button>
+                        </div>
+                    </div>
+                    <div class="controls-grid">
+                        <button id="saveSample" class="button success hidden">
+                            Save Sample
+                        </button>
+                        <button id="discardSample" class="button danger hidden">
+                            Discard Sample
+                        </button>
+                    </div>
+                    <div class="info-text">
+                        • The system will automatically check sample quality and wake word detection<br>
+                        • Listen to the sample before saving using the "Play" button
+                    </div>
+                </div>
+
+                <!-- Status and Progress Section -->
+                <div class="controls-section">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <h2 class="section-title">Current Status</h2>
+                            <div id="status" class="metric-card">
+                                Ready to record
+                            </div>
+                        </div>
+                        <div>
+                            <h2 class="section-title">Progress</h2>
+                            <div class="space-y-2">
+                                <div>
+                                    <div class="flex items-center justify-between text-sm">
+                                        <span class="text-gray-300">Human Samples</span>
+                                        <span id="humanProgress" class="text-gray-300">0/5</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div id="humanProgressBar" class="progress-bar-fill" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex items-center justify-between text-sm">
+                                        <span class="text-gray-300">AI Samples</span>
+                                        <span id="aiProgress" class="text-gray-300">0/5</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div id="aiProgressBar" class="progress-bar-fill" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quality Metrics Section -->
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold mb-3 text-gray-200">Sample Quality Metrics</h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="metric-card">
+                            <h3 class="font-medium mb-2 text-gray-300 text-sm">Audio Quality</h3>
+                            <div class="space-y-1 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Volume Level:</span>
+                                    <span id="volumeLevel" class="quality-metric">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Background Noise:</span>
+                                    <span id="noiseLevel" class="quality-metric">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Clarity:</span>
+                                    <span id="clarityLevel" class="quality-metric">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <h3 class="font-medium mb-2 text-gray-300 text-sm">Validation Rules</h3>
+                            <div class="space-y-1 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Duration:</span>
+                                    <span id="durationCheck" class="quality-metric">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Wake Word:</span>
+                                    <span id="wakeWordCheck" class="quality-metric">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Overall Quality:</span>
+                                    <span id="overallQuality" class="quality-metric">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Batch Processing Section -->
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold mb-3 text-gray-200">Batch Processing</h2>
+                    <div class="metric-card">
+                        <div class="text-sm text-gray-300 mb-3">
+                            <p>• Use "Start Batch Recording" to record multiple samples in sequence</p>
+                            <p>• Progress bars show how many samples have been recorded</p>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <button id="startBatch" class="button warning">
+                                Start Batch Recording
+                            </button>
+                            <span id="batchStatus" class="text-gray-400 text-sm">Ready for batch recording</span>
+                        </div>
+                        <div class="mt-3">
+                            <div class="flex items-center justify-between mb-1 text-sm">
+                                <span class="text-gray-300">Batch Progress</span>
+                                <span id="batchProgress" class="text-gray-300">0/10</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="batchProgressBar" class="progress-bar-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recorded Samples Section -->
+                <div class="controls-section">
+                    <h2 class="section-title">Recorded Samples</h2>
+                    
+                    <!-- Sample List Controls -->
+                    <div class="sample-list-controls">
+                        <div class="sort-controls">
+                            <label class="text-sm text-gray-400">Sort by:</label>
+                            <select id="sortBy" class="select-control">
+                                <option value="timestamp-desc">Newest First</option>
+                                <option value="timestamp-asc">Oldest First</option>
+                                <option value="duration-desc">Longest First</option>
+                                <option value="duration-asc">Shortest First</option>
+                                <option value="quality-desc">Highest Quality</option>
+                                <option value="quality-asc">Lowest Quality</option>
+                            </select>
+                        </div>
+                        <div class="filter-controls">
+                            <label class="text-sm text-gray-400">Filter:</label>
+                            <select id="filterType" class="select-control">
+                                <option value="all">All Types</option>
+                                <option value="human">Human Only</option>
+                                <option value="ai">AI Only</option>
+                            </select>
+                            <select id="filterQuality" class="select-control">
+                                <option value="all">All Quality</option>
+                                <option value="good">Good Quality</option>
+                                <option value="warning">Warning Quality</option>
+                                <option value="bad">Bad Quality</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Batch Actions -->
+                    <div class="batch-actions hidden" id="batchActions">
+                        <button class="button danger" onclick="deleteSelectedSamples()">
+                            Delete Selected
+                        </button>
+                        <button class="button" onclick="deselectAllSamples()">
+                            Deselect All
+                        </button>
+                    </div>
+
+                    <div class="sample-list">
+                        <div id="samplesList">
+                            <div class="no-samples">No samples recorded yet</div>
+                        </div>
+                    </div>
+                </div>
+
+                <template id="sampleItemTemplate">
+                    <div class="sample-item">
+                        <div class="sample-info">
+                            <input type="checkbox" class="checkbox-control sample-checkbox" onchange="updateBatchActions()">
+                            <span class="sample-type">Type</span>
+                            <span class="sample-timestamp">Timestamp</span>
+                            <span class="sample-duration">Duration</span>
+                        </div>
+                        <div class="waveform-container">
+                            <canvas class="waveform-canvas"></canvas>
+                        </div>
+                        <div class="quality-indicators">
+                            <div class="quality-indicator" title="Volume Level">
+                                <span class="indicator-icon">🔊</span>
+                                <span class="indicator-value">-</span>
+                            </div>
+                            <div class="quality-indicator" title="Background Noise">
+                                <span class="indicator-icon">🎧</span>
+                                <span class="indicator-value">-</span>
+                            </div>
+                            <div class="quality-indicator" title="Clarity">
+                                <span class="indicator-icon">✨</span>
+                                <span class="indicator-value">-</span>
+                            </div>
+                            <div class="quality-indicator" title="Wake Word Detection">
+                                <span class="indicator-icon">🎯</span>
+                                <span class="indicator-value">-</span>
+                            </div>
+                        </div>
+                        <div class="sample-actions">
+                            <button class="action-button play" title="Play Sample">
+                                ▶
+                            </button>
+                            <button class="action-button delete" title="Delete Sample">
+                                ×
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <div id="metrics-display" class="hidden mt-4 p-4 bg-gray-800 rounded-lg">
+                    <h3 class="text-lg font-semibold text-gray-200 mb-2">Audio Metrics</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-gray-400">Volume Level</label>
+                            <div class="flex items-center">
+                                <div class="w-full bg-gray-700 rounded-full h-2.5">
+                                    <div id="volume-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                                </div>
+                                <span id="volume-value" class="ml-2 text-gray-300">0%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-gray-400">Signal-to-Noise</label>
+                            <div class="flex items-center">
+                                <div class="w-full bg-gray-700 rounded-full h-2.5">
+                                    <div id="snr-bar" class="bg-green-600 h-2.5 rounded-full" style="width: 0%"></div>
+                                </div>
+                                <span id="snr-value" class="ml-2 text-gray-300">0%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-gray-400">Clarity</label>
+                            <div class="flex items-center">
+                                <div class="w-full bg-gray-700 rounded-full h-2.5">
+                                    <div id="clarity-bar" class="bg-yellow-600 h-2.5 rounded-full" style="width: 0%"></div>
+                                </div>
+                                <span id="clarity-value" class="ml-2 text-gray-300">0%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-gray-400">Overall Quality</label>
+                            <div class="flex items-center">
+                                <div class="w-full bg-gray-700 rounded-full h-2.5">
+                                    <div id="quality-bar" class="bg-purple-600 h-2.5 rounded-full" style="width: 0%"></div>
+                                </div>
+                                <span id="quality-value" class="ml-2 text-gray-300">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <span id="clipping-warning" class="text-red-500 text-sm hidden">Warning: Audio clipping detected</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let mediaRecorder = null;
+        let audioContext = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let recordingType = 'human';
+        let humanSamplesCount = 0;
+        let aiSamplesCount = 0;
+        let batchCount = 0;
+        let isBatchMode = false;
+        let audioPlayer;
+        let recordedSamples = [];
+        let currentAudio = null;
+        let selectedSamples = new Set();
+        let statusElement = null;
+        let recordHumanBtn = null;
+        let recordAIBtn = null;
+        let samplesList = null;
+        let socket = null;
+        let playButton = null;
+        let saveButton = null;
+        let discardButton = null;
+        let startBatchButton = null;
+
+        const humanProgress = document.getElementById('humanProgress');
+        const aiProgress = document.getElementById('aiProgress');
+        const humanProgressBar = document.getElementById('humanProgressBar');
+        const aiProgressBar = document.getElementById('aiProgressBar');
+        const batchProgress = document.getElementById('batchProgress');
+        const batchProgressBar = document.getElementById('batchProgressBar');
+        const startHumanButton = document.getElementById('recordHuman');
+        const startAIButton = document.getElementById('recordAI');
+        const stopButton = document.getElementById('stopRecording');
+        const batchStatus = document.getElementById('batchStatus');
+
+        // Quality metric elements
+        const volumeLevel = document.getElementById('volumeLevel');
+        const noiseLevel = document.getElementById('noiseLevel');
+        const clarityLevel = document.getElementById('clarityLevel');
+        const durationCheck = document.getElementById('durationCheck');
+        const wakeWordCheck = document.getElementById('wakeWordCheck');
+        const overallQuality = document.getElementById('overallQuality');
+
+        // Add log container reference
+        const logContainer = document.getElementById('logContainer');
+
+        // Initialize UI elements and WebSocket connection
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize UI elements
+            statusElement = document.getElementById('status');
+            recordHumanBtn = document.getElementById('recordHuman');
+            recordAIBtn = document.getElementById('recordAI');
+            samplesList = document.getElementById('samplesList');
+            playButton = document.getElementById('playSample');
+            saveButton = document.getElementById('saveSample');
+            discardButton = document.getElementById('discardSample');
+            startBatchButton = document.getElementById('startBatch');
+
+            // Initialize WebSocket connection
+            initializeWebSocket();
+            
+            // Load existing samples
+            loadSavedSamples();
+
+            // Add event listeners
+            if (recordHumanBtn) {
+                recordHumanBtn.addEventListener('click', () => {
+                    if (!isRecording) {
+                        startRecording('human');
+                        recordHumanBtn.textContent = 'Stop Recording';
+                        recordHumanBtn.classList.add('danger');
+                        if (recordAIBtn) recordAIBtn.classList.add('hidden');
+                    } else {
+                        stopRecording();
+                    }
+                });
+            }
+
+            if (recordAIBtn) {
+                recordAIBtn.addEventListener('click', () => {
+                    if (!isRecording) {
+                        startRecording('ai');
+                        recordAIBtn.textContent = 'Stop Recording';
+                        recordAIBtn.classList.add('danger');
+                        if (recordHumanBtn) recordHumanBtn.classList.add('hidden');
+                    } else {
+                        stopRecording();
+                    }
+                });
+            }
+
+            if (playButton) {
+                playButton.addEventListener('click', () => {
+                    if (audioChunks.length > 0) {
+                        const blob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
+                        const url = URL.createObjectURL(blob);
+                        const audio = new Audio(url);
+                        audio.play();
+                        audio.onended = () => URL.revokeObjectURL(url);
+                    }
+                });
+            }
+
+            if (saveButton) {
+                saveButton.addEventListener('click', saveSample);
+            }
+
+            if (discardButton) {
+                discardButton.addEventListener('click', () => {
+                    if (isBatchMode) {
+                        handleBatchError();
+                    }
+                    resetSampleUI();
+                });
+            }
+
+            if (startBatchButton) {
+                startBatchButton.addEventListener('click', startBatchMode);
+            }
+        });
+
+        function initializeWebSocket() {
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+                
+                socket = new WebSocket(wsUrl);
+                
+                socket.onopen = () => {
+                    console.log('WebSocket connection established');
+                    updateStatus('Connected to server');
+                };
+                
+                socket.onclose = () => {
+                    console.log('WebSocket connection closed');
+                    updateStatus('Disconnected from server');
+                    // Attempt to reconnect after 5 seconds
+                    setTimeout(initializeWebSocket, 5000);
+                };
+                
+                socket.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    updateStatus('Connection error');
+                };
+                
+                socket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleWebSocketMessage(data);
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+            } catch (error) {
+                console.error('Error initializing WebSocket:', error);
+                updateStatus('Failed to connect to server');
+            }
+        }
+
+        function handleWebSocketMessage(data) {
+            try {
+                if (data.type === 'processing_complete') {
+                    updateStatus(`Processing complete: ${data.message}`);
+                } else if (data.type === 'error') {
+                    updateStatus(`Error: ${data.message}`, true);
+                }
+            } catch (error) {
+                console.error('Error handling WebSocket message:', error);
+            }
+        }
+
+        function updateStatus(message, isError = false) {
+            if (!statusElement) return;
+            
+            statusElement.textContent = message;
+            statusElement.className = isError ? 'status error' : 'status';
+        }
+
+        function startBatchMode() {
+            try {
+                if (isRecording) {
+                    updateStatus('Cannot start batch mode while recording', true);
+                    return;
+                }
+
+                if (isBatchMode) {
+                    // Stop batch mode
+                    resetBatchMode();
+                    return;
+                }
+
+                isBatchMode = true;
+                batchCount = 0;
+                updateStatus('Starting batch recording mode...');
+
+                if (startBatchButton) {
+                    startBatchButton.textContent = 'Stop Batch Mode';
+                    startBatchButton.classList.add('danger');
+                }
+
+                if (batchStatus) {
+                    batchStatus.textContent = 'Recording in batch mode';
+                }
+
+                // Start the first recording
+                startNextBatchRecording();
+            } catch (error) {
+                console.error('Error starting batch mode:', error);
+                updateStatus('Error starting batch mode', true);
+                resetBatchMode();
+            }
+        }
+
+        function startNextBatchRecording() {
+            if (!isBatchMode) return;
+
+            // Alternate between human and AI recordings
+            const type = batchCount % 2 === 0 ? 'human' : 'ai';
+            startRecording(type);
+
+            // Update progress
+            if (batchProgress && batchProgressBar) {
+                batchProgress.textContent = `${batchCount}/10`;
+                batchProgressBar.style.width = `${(batchCount / 10) * 100}%`;
+            }
+        }
+
+        function handleBatchSuccess() {
+            batchCount++;
+            
+            if (batchCount >= 10) {
+                // Batch complete
+                updateStatus('Batch recording complete!');
+                resetBatchMode();
+                return;
+            }
+
+            // Short delay before next recording
+            setTimeout(() => {
+                updateStatus('Starting next batch recording...');
+                startNextBatchRecording();
+            }, 1000);
+        }
+
+        function handleBatchError() {
+            updateStatus('Error in batch recording', true);
+            resetBatchMode();
+        }
+
+        function resetBatchMode() {
+            isBatchMode = false;
+            batchCount = 0;
+
+            if (startBatchButton) {
+                startBatchButton.textContent = 'Start Batch Recording';
+                startBatchButton.classList.remove('danger');
+            }
+
+            if (batchStatus) {
+                batchStatus.textContent = 'Ready for batch recording';
+            }
+
+            if (batchProgress && batchProgressBar) {
+                batchProgress.textContent = '0/10';
+                batchProgressBar.style.width = '0%';
+            }
+
+            resetSampleUI();
+        }
+
+        async function startRecording(type) {
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Media devices not supported');
+                }
+
+                recordingType = type;
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    try {
+                        updateStatus('Processing recording...');
+                        await saveSample();
+                        await loadSavedSamples();
+                        updateStatus('Recording saved successfully');
+                    } catch (error) {
+                        console.error('Error processing recording:', error);
+                        updateStatus(`Error: ${error.message}`, true);
+                    }
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                if (recordHumanBtn) recordHumanBtn.disabled = true;
+                if (recordAIBtn) recordAIBtn.disabled = true;
+                updateStatus('Recording...');
+                
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                updateStatus(`Error: ${error.message}`, true);
+            }
+        }
+
+        async function stopRecording() {
+            try {
+                if (!mediaRecorder) {
+                    throw new Error('No active recording');
+                }
+                
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                
+                if (recordHumanBtn) recordHumanBtn.disabled = false;
+                if (recordAIBtn) recordAIBtn.disabled = false;
+                
+            } catch (error) {
+                console.error('Error stopping recording:', error);
+                updateStatus(`Error: ${error.message}`, true);
+            }
+        }
+
+        async function saveSample() {
+            try {
+                if (audioChunks.length === 0) {
+                    throw new Error('No audio recorded');
+                }
+
+                const blob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
+                const formData = new FormData();
+                formData.append('audio', blob);
+                formData.append('type', recordingType);
+                formData.append('timestamp', new Date().toISOString());
+
+                const response = await fetch('/api/process_sample', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to save sample');
+                }
+
+                updateStatus('Sample saved successfully');
+
+                // Update progress counters
+                if (recordingType === 'human') {
+                    humanSamplesCount++;
+                    if (humanProgress && humanProgressBar) {
+                        humanProgress.textContent = `${humanSamplesCount}/5`;
+                        humanProgressBar.style.width = `${(humanSamplesCount / 5) * 100}%`;
+                    }
+                } else {
+                    aiSamplesCount++;
+                    if (aiProgress && aiProgressBar) {
+                        aiProgress.textContent = `${aiSamplesCount}/5`;
+                        aiProgressBar.style.width = `${(aiSamplesCount / 5) * 100}%`;
+                    }
+                }
+
+                // Handle batch mode success
+                if (isBatchMode) {
+                    handleBatchSuccess();
+                } else {
+                    resetSampleUI();
+                }
+
+                // Reload the samples list
+                await loadSavedSamples();
+                return data;
+                
+            } catch (error) {
+                console.error('Error saving sample:', error);
+                updateStatus(`Error: ${error.message}`, true);
+                if (isBatchMode) {
+                    handleBatchError();
+                }
+                throw error;
+            }
+        }
+
+        async function loadSavedSamples() {
+            try {
+                const response = await fetch('/api/list_samples');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const samples = data.samples || [];
+                
+                if (!samplesList) {
+                    throw new Error('Samples list element not found');
+                }
+                
+                recordedSamples = samples;
+                samplesList.innerHTML = '';
+                
+                if (samples.length === 0) {
+                    samplesList.innerHTML = '<div class="no-samples">No samples recorded yet</div>';
+                    return;
+                }
+                
+                samples.forEach(sample => addSampleToList(sample));
+            } catch (error) {
+                console.error('Error loading samples:', error);
+            }
+        }
+
+        function addSampleToList(sample) {
+            const template = document.getElementById('sampleItemTemplate');
+            const samplesList = document.getElementById('samplesList');
+            const noSamplesMsg = samplesList.querySelector('.no-samples');
+            
+            if (noSamplesMsg) {
+                noSamplesMsg.remove();
+            }
+
+            const clone = template.content.cloneNode(true);
+            const sampleItem = clone.querySelector('.sample-item');
+            sampleItem.dataset.filename = sample.filename;
+            
+            const typeSpan = sampleItem.querySelector('.sample-type');
+            typeSpan.textContent = sample.type.toUpperCase();
+            typeSpan.classList.add(sample.type.toLowerCase());
+            
+            const timestamp = sampleItem.querySelector('.sample-timestamp');
+            timestamp.textContent = new Date(sample.timestamp).toLocaleTimeString();
+            
+            const duration = sampleItem.querySelector('.sample-duration');
+            duration.textContent = formatDuration(sample.duration || 0);
+            
+            // Update quality indicators
+            const indicators = sampleItem.querySelectorAll('.quality-indicator');
+            updateQualityIndicator(indicators[0], sample.metrics?.volume || 0);
+            updateQualityIndicator(indicators[1], 1 - (sample.metrics?.noise || 0));
+            updateQualityIndicator(indicators[2], sample.metrics?.clarity || 0);
+            updateQualityIndicator(indicators[3], sample.metrics?.wake_word || false, 'boolean');
+            
+            // Draw waveform if data available
+            if (sample.waveform) {
+                const canvas = sampleItem.querySelector('.waveform-canvas');
+                drawWaveform(canvas, sample.waveform);
+            }
+            
+            const playButton = sampleItem.querySelector('.play');
+            playButton.addEventListener('click', () => playSample(sample));
+            
+            const deleteButton = sampleItem.querySelector('.delete');
+            deleteButton.addEventListener('click', () => deleteSample(sample, sampleItem));
+            
+            const checkbox = sampleItem.querySelector('.sample-checkbox');
+            checkbox.addEventListener('change', updateBatchActions);
+            
+            samplesList.appendChild(sampleItem);
+        }
+
+        async function deleteSample(sample, element) {
+            try {
+                const response = await fetch(`/api/delete_sample/${sample.filename}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) throw new Error('Failed to delete sample');
+
+                element.remove();
+                recordedSamples = recordedSamples.filter(s => s.filename !== sample.filename);
+                
+                const samplesList = document.getElementById('samplesList');
+                if (samplesList.children.length === 0) {
+                    samplesList.innerHTML = '<div class="no-samples">No samples recorded yet</div>';
+                }
+
+                // Update progress if needed
+                if (sample.type.toLowerCase() === 'human') {
+                    humanSamplesCount = Math.max(0, humanSamplesCount - 1);
+                    humanProgress.textContent = `${humanSamplesCount}/5`;
+                    humanProgressBar.style.width = `${(humanSamplesCount / 5) * 100}%`;
+                } else {
+                    aiSamplesCount = Math.max(0, aiSamplesCount - 1);
+                    aiProgress.textContent = `${aiSamplesCount}/5`;
+                    aiProgressBar.style.width = `${(aiSamplesCount / 5) * 100}%`;
+                }
+            } catch (error) {
+                console.error('Error deleting sample:', error);
+                updateStatus('Error deleting sample', true);
+            }
+        }
+
+        function resetSampleUI() {
+            if (recordHumanBtn) {
+                recordHumanBtn.textContent = 'Start Human Recording';
+                recordHumanBtn.classList.remove('danger', 'hidden');
+            }
+            if (recordAIBtn) {
+                recordAIBtn.textContent = 'Start AI Recording';
+                recordAIBtn.classList.remove('danger', 'hidden');
+            }
+            if (playButton) playButton.classList.add('hidden');
+            if (saveButton) saveButton.classList.add('hidden');
+            if (discardButton) discardButton.classList.add('hidden');
+            
+            if (statusElement) {
+                statusElement.textContent = 'Ready to record';
+            }
+        }
+
+        function updateMetricsDisplay(metrics) {
+            const metricsDisplay = document.getElementById('metrics-display');
+            metricsDisplay.classList.remove('hidden');
+            
+            // Update progress bars and values
+            document.getElementById('volume-bar').style.width = `${metrics.volume_level}%`;
+            document.getElementById('volume-value').textContent = `${metrics.volume_level}%`;
+            
+            document.getElementById('snr-bar').style.width = `${metrics.signal_to_noise}%`;
+            document.getElementById('snr-value').textContent = `${metrics.signal_to_noise}%`;
+            
+            document.getElementById('clarity-bar').style.width = `${metrics.clarity}%`;
+            document.getElementById('clarity-value').textContent = `${metrics.clarity}%`;
+            
+            document.getElementById('quality-bar').style.width = `${metrics.quality_score}%`;
+            document.getElementById('quality-value').textContent = `${metrics.quality_score}%`;
+            
+            // Show/hide clipping warning
+            const clippingWarning = document.getElementById('clipping-warning');
+            if (metrics.clipping_percentage > 1) {
+                clippingWarning.classList.remove('hidden');
+                clippingWarning.textContent = `Warning: ${metrics.clipping_percentage}% of audio is clipping`;
+            } else {
+                clippingWarning.classList.add('hidden');
+            }
+        }
+
+        // Update the handleAudioData function to display metrics
+        async function handleAudioData(audioBlob, timestamp) {
+            try {
+                const formData = new FormData();
+                formData.append('audio', audioBlob);
+                formData.append('timestamp', timestamp);
+                formData.append('type', 'recording');
+                
+                const response = await fetch('/save-sample', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showMessage('Sample saved successfully', 'success');
+                    updateMetricsDisplay(result.metrics);
+                } else {
+                    showMessage(result.error || 'Failed to save sample', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving sample:', error);
+                showMessage('Error saving sample', 'error');
+            }
+        }
+    </script>
+</body>
+</html> 
+
+
+

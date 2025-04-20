@@ -1014,13 +1014,14 @@
     <header class="header">
         <div class="header-brand">
             <img src="/static/images/light-mode-brain-2.png" alt="Brain Icon" class="brain-image">
-            <span class="header-text">GoodRobot</span>
+            <span class="header-text">Good Robot</span>
         </div>
         <nav class="nav-links">
             <a href="http://localhost:3000" class="nav-link" target="_blank" rel="noopener noreferrer">Documentation</a>
             <a href="http://localhost:8000/redoc" class="nav-link" target="_blank" rel="noopener noreferrer">API Docs</a>
             <a href="http://localhost:8000/voice" class="nav-link">Voice Interface</a>
             <a href="/research" class="nav-link">Research</a>
+            <a href="/sample-recorder" class="nav-link">Sample Recorder</a>
         </nav>
     </header>
 
@@ -1242,6 +1243,17 @@
             '/static/images/hipster_1.png',
             '/static/images/hipster-female-younger-1-blue.png',
             '/static/images/hipster-female-younger-1-gray.png',
+            '/static/images/hipster-female-younger-1.png',
+            '/static/images/hipster-male-younger-1.png',
+            '/static/images/hipster-male-older-1.png',
+            '/static/images/hipster-female-older-1.png',
+            '/static/images/hipster-female-2.png',
+            '/static/images/hipster-female-1.png',
+            '/static/images/hipster-6.png',
+            '/static/images/hipster-5.png',
+            '/static/images/hipster-4.png',
+            '/static/images/hipster-3.png',
+            '/static/images/hipster-2.png',
             '/static/images/light-mode-brain-2.png',
             '/static/images/light-mode-logo-3.png'
         ];
@@ -1286,22 +1298,41 @@
         function loadSettings() {
             try {
                 const savedSettings = localStorage.getItem(SETTINGS_KEY);
-                return savedSettings ? JSON.parse(savedSettings) : DEFAULT_SETTINGS;
+                if (savedSettings) {
+                    const settings = JSON.parse(savedSettings);
+                    sensitivity.value = settings.sensitivity;
+                    sensitivityValue.textContent = settings.sensitivity;
+                    audioGain.value = settings.audioGain;
+                    audioGainValue.textContent = settings.audioGain;
+                    noiseThreshold.value = settings.noiseThreshold;
+                    noiseThresholdValue.textContent = settings.noiseThreshold;
+                    language.value = settings.language;
+                    
+                    // Load saved avatar if it exists
+                    const savedAvatar = localStorage.getItem('selectedAvatar');
+                    if (savedAvatar) {
+                        robotFace.src = savedAvatar;
+                        currentFaceIndex = robotFaces.indexOf(savedAvatar);
+                    }
+                }
             } catch (error) {
                 console.error('Error loading settings:', error);
-                return DEFAULT_SETTINGS;
             }
         }
 
         // Save settings to localStorage
         function saveSettings() {
-            const settings = {
-                sensitivity: parseFloat(sensitivity.value),
-                audioGain: parseFloat(audioGain.value),
-                noiseThreshold: parseFloat(noiseThreshold.value),
-                language: language.value
-            };
-            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+            try {
+                const settings = {
+                    sensitivity: sensitivity.value,
+                    audioGain: audioGain.value,
+                    noiseThreshold: noiseThreshold.value,
+                    language: language.value
+                };
+                localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+            } catch (error) {
+                console.error('Error saving settings:', error);
+            }
         }
 
         // Initialize settings
@@ -1507,303 +1538,344 @@
         }
 
         async function startListening() {
-            if (isListening) return;
-
             try {
-                await initWebSocket();
-
-                // Close any existing audio context
-                if (audioContext) {
-                    await audioContext.close();
+                if (isListening) {
+                    console.log('Already listening');
+                    return;
                 }
 
-                // First get the audio stream to check its sample rate
+                // Get audio stream first
                 audioStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
-                        channelCount: 1,
                         echoCancellation: true,
                         noiseSuppression: true,
                         autoGainControl: true
                     }
                 });
 
-                // Create a temporary audio context to detect the stream's sample rate
-                const tempContext = new AudioContext();
-                const tempSource = tempContext.createMediaStreamSource(audioStream);
-                const streamSampleRate = tempContext.sampleRate;
-                tempSource.disconnect();
-                await tempContext.close();
+                // Get the actual sample rate from the stream
+                const track = audioStream.getAudioTracks()[0];
+                const capabilities = track.getCapabilities();
+                const settings = track.getSettings();
+                const inputSampleRate = settings.sampleRate || capabilities.sampleRate || 48000;
 
-                // Create main AudioContext with the stream's sample rate
-                audioContext = new AudioContext({
-                    sampleRate: streamSampleRate
+                console.log(`Audio stream settings:`, {
+                    sampleRate: inputSampleRate,
+                    channelCount: settings.channelCount,
+                    echoCancellation: settings.echoCancellation,
+                    noiseSuppression: settings.noiseSuppression,
+                    autoGainControl: settings.autoGainControl
                 });
 
-                // Create and connect audio nodes
+                // Create audio context with native sample rate
+                audioContext = new AudioContext({ sampleRate: inputSampleRate });
+                console.log(`Audio context created with sample rate: ${audioContext.sampleRate}Hz`);
+
+                // Create and connect nodes
                 source = audioContext.createMediaStreamSource(audioStream);
                 gainNode = audioContext.createGain();
                 gainNode.gain.value = parseFloat(audioGain.value);
+
+                // Create analyzer for visualization
                 analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
-                bufferLength = analyser.frequencyBinCount;
-                dataArray = new Uint8Array(bufferLength);
+                analyser.fftSize = 2048;
+                analyser.smoothingTimeConstant = 0.8;
+                analyser.minDecibels = -100;
+                analyser.maxDecibels = -30;
 
-                // Connect the audio processing chain
-                source.connect(gainNode);
-                gainNode.connect(analyser);
-
-                // Load and connect the audio worklet
-                await audioContext.audioWorklet.addModule('/static/js/audio-processor.js');
-                const workletNode = new AudioWorkletNode(audioContext, 'audio-processor', {
+                // Add audio worklet with proper sample rate conversion
+                await audioContext.audioWorklet.addModule('static/js/audio-processor.js');
+                const processorNode = new AudioWorkletNode(audioContext, 'audio-processor', {
                     processorOptions: {
-                        sampleRate: streamSampleRate,
+                        inputSampleRate: inputSampleRate,
                         targetSampleRate: 16000,
                         bufferSize: 512
                     }
                 });
 
-                gainNode.connect(workletNode);
-                workletNode.connect(audioContext.destination);
-
-                // Handle audio processing messages
-                workletNode.port.onmessage = (event) => {
-                    if (event.data.type === 'audio' && ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(event.data.data);
+                // Set up processor message handler
+                processorNode.port.onmessage = (event) => {
+                    if (event.data.type === 'audio') {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                type: 'audio',
+                                data: event.data.data,
+                                metrics: event.data.metrics
+                            }));
+                        }
                     }
                 };
 
-                // Start audio context if it's not running
-                if (audioContext.state !== 'running') {
-                    await audioContext.resume();
-                }
+                // Connect nodes
+                source.connect(gainNode);
+                gainNode.connect(analyser);
+                gainNode.connect(processorNode);
+                processorNode.connect(audioContext.destination);
 
-                const bufferLength = analyser.frequencyBinCount;
-                const dataArray = new Uint8Array(bufferLength);
+                console.log('Audio nodes connected:', {
+                    source: source.constructor.name,
+                    gainNode: gainNode.constructor.name,
+                    analyser: analyser.constructor.name,
+                    processorNode: processorNode.constructor.name
+                });
 
-                function updateVolume() {
-                    if (!isListening) return;
+                // Set up WebSocket with retry logic
+                await setupWebSocketWithRetry();
+                
+                // Start visualization
+                visualize();
 
-                    analyser.getByteFrequencyData(dataArray);
-                    const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-                    const volume = Math.min(100, Math.max(0, (average / 255) * 100));
-                    volumeLevel.style.width = `${volume}%`;
-
-                    const normalizedVolume = volume / 100;
-                    const micVisualization = document.querySelector('.mic-visualization');
-                    const volumeMeter = document.querySelector('.volume-meter');
-                    const logoContainer = document.querySelector('.logo-container');
-
-                    if (normalizedVolume > parseFloat(noiseThreshold.value)) {
-                        micVisualization.querySelector('.mic-icon').classList.add('mic-active');
-                        volumeMeter.classList.add('active');
-                        document.querySelector('.live-transcription').classList.add('active');
-                        logoContainer.classList.add('listening');
-                    } else {
-                        micVisualization.querySelector('.mic-icon').classList.remove('mic-active');
-                        volumeMeter.classList.remove('active');
-                        document.querySelector('.live-transcription').classList.remove('active');
-                        logoContainer.classList.remove('listening');
-                    }
-
-                    requestAnimationFrame(updateVolume);
-                }
-
-                isListening = true;
-                status.textContent = calibrationMode ? 'Calibrating...' : 'Listening...';
-                startButton.disabled = true;
+                // Update UI
+                startButton.style.display = 'none';
+                stopButton.style.display = 'inline';
                 stopButton.disabled = false;
-
-                addLogEntry('Started listening');
-                updateVolume();
+                isListening = true;
+                status.textContent = 'Listening...';
+                
+                console.log('Audio capture started successfully');
+                addLogEntry('Audio capture started', false, 'client', 'INFO');
             } catch (error) {
-                console.error('Error starting audio:', error);
-                status.textContent = 'Error starting audio';
-                addLogEntry(`Error starting audio: ${error}`, true);
-                stopListening();
+                console.error('Error starting audio capture:', error);
+                status.textContent = `Error: ${error.message}`;
+                addLogEntry(`Error starting audio capture: ${error.message}`, true, 'client', 'ERROR');
+                await cleanupAudioResources();
+                startButton.disabled = false;
+                stopButton.disabled = true;
             }
         }
 
-        async function initWebSocket() {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                return;
-            }
-
-            const clientId = generateClientId();
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/${clientId}`;
+        async function setupWebSocketWithRetry(retryCount = 0) {
+            const maxRetries = 3;
+            const retryDelay = 1000;
 
             try {
+                const clientId = generateClientId();
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws/${clientId}`;
+                
                 ws = new WebSocket(wsUrl);
-
+                
                 ws.onopen = () => {
-                    addLogEntry('WebSocket connected');
+                    console.log('WebSocket connected');
                     wsConnected = true;
-                    wsReconnectAttempts = 0;
-
-                    // Send initial configuration
-                    const config = {
+                    // Send initial configuration with actual sample rates
+                    ws.send(JSON.stringify({
                         type: 'config',
-                        sensitivity: parseFloat(sensitivity.value),
-                        noiseThreshold: parseFloat(noiseThreshold.value)
-                    };
-                    ws.send(JSON.stringify(config));
+                        config: {
+                            inputSampleRate: audioContext ? audioContext.sampleRate : 48000,
+                            targetSampleRate: 16000,
+                            channels: 1,
+                            bufferSize: 512,
+                            sensitivity: parseFloat(sensitivity.value),
+                            noiseThreshold: parseFloat(noiseThreshold.value)
+                        }
+                    }));
                 };
-
+                
                 ws.onclose = async (event) => {
+                    console.log('WebSocket closed:', event.code, event.reason);
                     wsConnected = false;
-                    addLogEntry(`WebSocket disconnected (code: ${event.code})`, true, 'client', 'WARNING');
-
-                    if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                        wsReconnectAttempts++;
-                        addLogEntry(`Attempting to reconnect (${wsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, false, 'client', 'INFO');
-                        await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY));
-                        await initWebSocket();
-                    } else {
-                        addLogEntry('Max reconnection attempts reached. Please refresh the page.', true, 'client', 'ERROR');
+                    
+                    if (isListening && retryCount < maxRetries) {
+                        console.log(`Retrying WebSocket connection (${retryCount + 1}/${maxRetries})`);
+                        await new Promise(resolve => setTimeout(resolve, retryDelay));
+                        await setupWebSocketWithRetry(retryCount + 1);
+                    } else if (isListening) {
+                        console.log('Max retries reached, stopping audio capture');
+                        await stopListening();
+                    }
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    if (retryCount >= maxRetries) {
                         stopListening();
                     }
                 };
-
-                ws.onerror = (error) => {
-                    addLogEntry('WebSocket error occurred', true, 'client', 'ERROR');
-                    console.error('WebSocket error:', error);
-                };
-
+                
                 ws.onmessage = handleWebSocketMessage;
-
+                
             } catch (error) {
-                addLogEntry(`Failed to initialize WebSocket: ${error.message}`, true, 'client', 'ERROR');
-                throw error;
+                console.error('Error setting up WebSocket:', error);
+                if (retryCount < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                    await setupWebSocketWithRetry(retryCount + 1);
+                } else {
+                    throw error;
+                }
             }
+        }
+
+        // Add visualization function
+        function visualize() {
+            if (!analyser) return;
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Float32Array(bufferLength);
+            
+            function draw() {
+                if (!isListening) return;
+                
+                requestAnimationFrame(draw);
+                analyser.getFloatTimeDomainData(dataArray);
+                
+                // Calculate RMS value
+                let rms = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    rms += dataArray[i] * dataArray[i];
+                }
+                rms = Math.sqrt(rms / bufferLength);
+                
+                // Update volume meter
+                const volumePercent = Math.min(100, rms * 400);
+                volumeLevel.style.width = volumePercent + '%';
+                
+                // Update microphone animation
+                const micIcon = document.querySelector('.mic-icon');
+                if (rms > 0.01) {
+                    micIcon.classList.add('mic-active');
+                } else {
+                    micIcon.classList.remove('mic-active');
+                }
+            }
+            
+            draw();
         }
 
         function handleWebSocketMessage(event) {
-            try {
-                let data;
-                if (typeof event.data === 'string') {
-                    data = JSON.parse(event.data);
-                } else if (event.data instanceof ArrayBuffer) {
-                    // Handle binary audio data
-                    const audioData = new Int16Array(event.data);
-                    addLogEntry(`Received audio data: ${audioData.length} samples`, false, 'client', 'DEBUG');
-                    return;
-                } else {
-                    addLogEntry('Received unknown message type', true, 'client', 'ERROR');
-                    return;
-                }
+            const message = JSON.parse(event.data);
+            console.log('Received WebSocket message:', message);
 
-                if (data.error) {
-                    addLogEntry(`Server error: ${data.error}`, true, 'client', 'ERROR');
-                    return;
-                }
-
-                switch (data.type) {
-                    case 'wakeword':
-                        handleWakeWordDetection(data);
-                        break;
-                    case 'transcription':
-                        handleTranscription(data);
-                        break;
-                    case 'status':
-                        handleStatusUpdate(data);
-                        break;
-                    case 'error':
-                        addLogEntry(`Error from server: ${data.message}`, true, 'client', 'ERROR');
-                        break;
-                    default:
-                        addLogEntry(`Unknown message type: ${data.type}`, false, 'client', 'WARNING');
-                }
-            } catch (error) {
-                addLogEntry(`Error processing message: ${error.message}`, true, 'client', 'ERROR');
-                console.error('Message processing error:', error);
+            switch (message.type) {
+                case 'command_ack':
+                    if (message.command === 'stop' && message.status === 'success') {
+                        console.log('Stop command acknowledged by server');
+                        cleanupAudioResources();
+                    } else if (message.command === 'start' && message.status === 'success') {
+                        console.log('Start command acknowledged by server');
+                        updateUIForListening();
+                    }
+                    break;
+                case 'error':
+                    console.error('Server error:', message.error);
+                    displayError(message.error);
+                    cleanupAudioResources();
+                    break;
+                case 'config_ack':
+                    console.log('Configuration acknowledged:', message);
+                    break;
+                case 'calibration_complete':
+                    handleCalibrationComplete(message);
+                    break;
+                case 'wake_word_detected':
+                    console.log('Wake word detected:', message);
+                    addLogEntry('Wake word detected', false, 'server', 'INFO');
+                    break;
+                case 'audio_metrics':
+                    console.log('Audio metrics:', message.metrics);
+                    addLogEntry(`Audio metrics - RMS: ${message.metrics.rms.toFixed(4)}, Peak: ${message.metrics.peak.toFixed(4)}, SNR: ${message.metrics.snr.toFixed(2)}dB`, false, 'server', 'DEBUG');
+                    break;
+                default:
+                    console.log('Unknown message type:', message.type);
             }
         }
 
-        function stopListening() {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
-
-            // Stop all tracks in the audio stream
+        function cleanupAudioResources() {
             if (audioStream) {
                 audioStream.getTracks().forEach(track => {
                     track.stop();
-                    audioStream.removeTrack(track);
+                    console.log('Stopped audio track:', track.kind);
                 });
                 audioStream = null;
             }
 
-            // Clean up audio context and nodes
-            if (source) {
-                source.disconnect();
-                source = null;
-            }
-            if (gainNode) {
-                gainNode.disconnect();
-                gainNode = null;
-            }
-            if (analyser) {
-                analyser.disconnect();
-                analyser = null;
-            }
-            if (audioContext && audioContext.state !== 'closed') {
-                audioContext.close().catch(console.error);
+            if (audioContext) {
+                if (audioContext.state !== 'closed') {
+                    audioContext.close().then(() => {
+                        console.log('AudioContext closed successfully');
+                    }).catch(err => {
+                        console.error('Error closing AudioContext:', err);
+                    });
+                }
                 audioContext = null;
             }
 
-            // Close WebSocket connection
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.close();
-                ws = null;
-            }
-
-            // Reset UI state
-            isListening = false;
-            status.textContent = 'Stopped';
+            // Reset UI
             startButton.disabled = false;
             stopButton.disabled = true;
+            status.textContent = 'Not listening';
+            isListening = false;
 
-            // Reset volume indicator
-            volumeLevel.style.width = '0%';
-            const volumeMeter = document.querySelector('.volume-meter');
-            volumeMeter.classList.remove('active');
-            volumeMeter.querySelector('.volume-level').style.width = '0%';
+            console.log('All audio resources cleaned up');
+        }
 
-            // Reset microphone visualization
-            const micIcon = document.querySelector('.mic-visualization .mic-icon');
-            micIcon.classList.remove('mic-active');
-            const waves = micIcon.querySelectorAll('.wave');
-            waves.forEach(wave => {
-                wave.style.animation = 'none';
-                wave.offsetHeight; // Force reflow
-                wave.style.animation = null;
-            });
-
-            // Reset logo rotation
-            const logoContainer = document.querySelector('.logo-container');
-            logoContainer.classList.remove('listening');
-
-            // Reset thought bubble
-            const liveTranscription = document.querySelector('.live-transcription');
-            liveTranscription.classList.remove('active');
-            const transcriptionText = liveTranscription.querySelector('.transcription-text');
-            if (transcriptionText) {
-                transcriptionText.textContent = '';
+        function stopListening() {
+            if (!isListening) {
+                console.log('Already stopped listening');
+                return;
             }
 
-            // Reset transcription and response areas
-            transcription.textContent = '';
-            response.textContent = '';
+            console.log('Stopping listening...');
+            
+            // Send stop command to server first
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'command',
+                    command: 'stop'
+                }));
+                console.log('Stop command sent to server');
+            } else {
+                console.warn('WebSocket not available for stop command, cleaning up locally');
+                cleanupAudioResources();
+            }
+        }
 
-            wsConnected = false;
-            isReconnecting = false;
-            reconnectAttempts = 0;
+        function displayError(message) {
+            status.textContent = `Error: ${message}`;
+            status.style.color = 'red';
+            setTimeout(() => {
+                status.style.color = '';
+            }, 5000);
+        }
 
-            addLogEntry('Stopped listening and cleaned up all resources');
+        function handleCalibrationComplete(message) {
+            console.log('Calibration complete:', message);
+            // Handle calibration completion logic here
+        }
+
+        function updateUIForListening() {
+            // Implement the logic to update the UI for listening
+            console.log('Updating UI for listening');
         }
 
         startButton.addEventListener('click', startListening);
         stopButton.addEventListener('click', stopListening);
+
+        // Add event listeners for calibration buttons
+        startCalibration.addEventListener('click', () => {
+            if (!isListening) {
+                startListening();
+            }
+            calibrationMode = true;
+            calibrationSamples = [];
+            startCalibration.style.display = 'none';
+            stopCalibration.style.display = 'inline';
+            calibrationStatus.style.display = 'block';
+            progressBar.style.width = '0%';
+            samplesCount.textContent = 'Samples: 0/5';
+            addLogEntry('Starting calibration mode');
+        });
+
+        stopCalibration.addEventListener('click', () => {
+            calibrationMode = false;
+            startCalibration.style.display = 'inline';
+            stopCalibration.style.display = 'none';
+            calibrationStatus.style.display = 'none';
+            if (!isListening) {
+                stopListening();
+            }
+            addLogEntry('Stopped calibration mode');
+        });
 
         // Clean up on page unload
         window.addEventListener('beforeunload', () => {
@@ -1814,13 +1886,10 @@
         });
 
         shuffleButton.addEventListener('click', () => {
-            shuffleButton.classList.add('rotating');
             currentFaceIndex = (currentFaceIndex + 1) % robotFaces.length;
             robotFace.src = robotFaces[currentFaceIndex];
-
-            setTimeout(() => {
-                shuffleButton.classList.remove('rotating');
-            }, 500);
+            // Save the selected avatar to localStorage
+            localStorage.setItem('selectedAvatar', robotFaces[currentFaceIndex]);
         });
 
         // Add event listeners for filters
@@ -1952,3 +2021,4 @@
     </script>
 </body>
 </html>
+
