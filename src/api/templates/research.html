@@ -39,18 +39,52 @@
         }
 
         .header {
-            text-align: center;
-            margin-bottom: 3rem;
+            width: 100%;
+            padding: 1rem 2rem;
+            background: var(--surface-color);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            position: relative;
+            z-index: 100;
+            margin-bottom: 2rem;
         }
 
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
         }
 
-        .header p {
-            color: var(--muted-text);
-            font-size: 1.1rem;
+        .brain-image {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+        }
+
+        .header-text {
+            color: var(--text-color);
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .nav-link {
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--primary-color);
         }
 
         .research-grid {
@@ -270,8 +304,16 @@
 <body>
     <div class="container">
         <header class="header">
-            <h1>Confidence Correlations</h1>
-            <p>Explore and contribute to research hypotheses testing correlations between various factors affecting human potential and well-being.</p>
+            <a href="/" class="header-brand" style="text-decoration: none;">
+                <img src="/static/images/light-mode-brain-2.png" alt="Brain Icon" class="brain-image">
+                <span class="header-text">Good Robot</span>
+            </a>
+            <nav class="nav-links">
+                <a href="/docs" class="nav-link">API Docs</a>
+                <a href="/voice" class="nav-link">Voice Interface</a>
+                <a href="/research" class="nav-link">Research</a>
+                <a href="/sample-recorder" class="nav-link">Sample Recorder</a>
+            </nav>
         </header>
 
         <div class="search-bar">

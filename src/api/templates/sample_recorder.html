@@ -222,12 +222,149 @@
         }
 
         .sample-item {
-            padding: 0.5rem;
-            margin-bottom: 0.25rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
         }
 
-        .waveform-container {
-            height: 30px;
+        .sample-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .sample-type {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
+
+        .sample-type.human {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .sample-type.ai {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .sample-timestamp {
+            color: var(--muted-text);
+            font-size: 0.8rem;
+        }
+
+        .sample-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+
+        .metric {
+            font-size: 0.8rem;
+            color: var(--text-color);
+        }
+
+        .sample-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .play-button, .delete-button {
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .play-button {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .play-button:hover {
+            background: var(--hover-color);
+        }
+
+        .delete-button {
+            background: var(--error-color);
+            color: white;
+        }
+
+        .delete-button:hover {
+            background: #ff3333;
+        }
+
+        #logsList {
+            padding: 0.5rem;
+            height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+
+        .log-entry {
+            padding: 0.25rem;
+            border-bottom: 1px solid var(--border-color);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: var(--muted-text);
+        }
+
+        .log-source {
+            color: var(--primary-color);
+        }
+
+        .log-level {
+            color: var(--success-color);
+        }
+
+        .log-level.error {
+            color: var(--error-color);
+        }
+
+        .log-message {
+            margin-left: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .error .log-message {
+            color: var(--error-color);
+        }
+
+        .info .log-message {
+            color: var(--text-color);
+        }
+
+        .warning .log-message {
+            color: #ff9900;
+        }
+
+        .no-samples {
+            text-align: center;
+            padding: 2rem;
+            color: var(--muted-text);
+            font-style: italic;
         }
 
         .recording {
@@ -552,14 +689,14 @@
 </head>
 <body>
     <header class="header">
-        <div class="header-brand">
+        <a href="/" class="logo" style="text-decoration: none;">
             <img src="/static/images/light-mode-brain-2.png" alt="Brain Icon" class="brain-image">
             <span class="header-text">Good Robot</span>
-        </div>
+        </a>
         <nav class="nav-links">
+            <a href="/docs" class="nav-link" target="_blank" rel="noopener noreferrer">API Docs</a>
             <a href="http://localhost:3000" class="nav-link" target="_blank" rel="noopener noreferrer">Documentation</a>
-            <a href="http://localhost:8000/redoc" class="nav-link" target="_blank" rel="noopener noreferrer">API Docs</a>
-            <a href="http://localhost:8000/voice" class="nav-link">Voice Interface</a>
+            <a href="/voice" class="nav-link">Voice Interface</a>
             <a href="/research" class="nav-link">Research</a>
             <a href="/sample-recorder" class="nav-link">Sample Recorder</a>
         </nav>
@@ -816,11 +953,7 @@
                 startBatchButton.addEventListener('click', startBatchMode);
             }
             if (playButton) {
-                playButton.addEventListener('click', () => {
-                    if (currentAudio) {
-                        playRecording(currentAudio);
-                    }
-                });
+                playButton.addEventListener('click', playRecording);
             }
             if (saveButton) {
                 saveButton.addEventListener('click', saveSample);
@@ -836,85 +969,39 @@
             loadSavedSamples();
         });
 
-        // Helper function to safely add event listeners
-        function addSafeEventListener(element, event, handler) {
-            if (element && typeof handler === 'function') {
-                element.addEventListener(event, handler);
-            }
-        }
-
-        // Helper function to safely remove event listeners
-        function removeSafeEventListener(element, event, handler) {
-            if (element && typeof handler === 'function') {
-                element.removeEventListener(event, handler);
-            }
-        }
-
-        async function startRecording(type) {
+        function stopRecording() {
             try {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error('Media devices not supported');
+                if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                    throw new Error('No active recording');
+                }
+                
+                // Stop the media recorder
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                
+                // Disable stop button
+                if (stopRecordingBtn) {
+                    stopRecordingBtn.disabled = true;
+                    stopRecordingBtn.classList.add('hidden');
                 }
 
-                recordingType = type;
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Re-enable recording buttons
+                if (recordHumanBtn) {
+                    recordHumanBtn.classList.remove('hidden');
+                    recordHumanBtn.disabled = false;
+                }
+                if (recordAIBtn) {
+                    recordAIBtn.classList.remove('hidden');
+                    recordAIBtn.disabled = false;
+                }
                 
-                await initAudioContext(stream);
-                
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
-                
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        audioChunks.push(event.data);
-                    }
-                };
-                
-                mediaRecorder.onstop = async () => {
-                    try {
-                        updateStatus('Processing recording...');
-                        const result = await saveSample();
-                        if (result && result.success) {
-                            updateStatus('Recording saved successfully');
-                        } else {
-                            updateStatus(result.error || 'Failed to save recording', true);
-                        }
-                        
-                        // Clean up audio context
-                        if (audioContext) {
-                            cancelAnimationFrame(animationId);
-                            await audioContext.close();
-                            audioContext = null;
-                        }
-                        
-                        // Reset UI
-                        resetRecordingUI();
-                        
-                    } catch (error) {
-                        console.error('Error processing recording:', error);
-                        updateStatus(`Error: ${error.message}`, true);
-                        resetRecordingUI();
-                    }
-                };
-                
-                mediaRecorder.start();
-                isRecording = true;
-                
-                // Update UI
-                updateRecordingUI();
-                updateStatus('Recording... Speak clearly into your microphone');
+                updateStatus('Processing recording...');
                 
             } catch (error) {
-                console.error('Error starting recording:', error);
+                console.error('Error stopping recording:', error);
                 updateStatus(`Error: ${error.message}`, true);
                 resetRecordingUI();
-                
-                // Clean up on error
-                if (audioContext) {
-                    cancelAnimationFrame(animationId);
-                    await audioContext.close();
-                    audioContext = null;
-                }
             }
         }
 
@@ -931,42 +1018,125 @@
                 recordAIBtn.classList.add('hidden');
                 recordAIBtn.disabled = true;
             }
-        }
-
-        function resetRecordingUI() {
-            if (stopRecordingBtn) {
-                stopRecordingBtn.classList.add('hidden');
-                stopRecordingBtn.disabled = true;
+            // Hide save/discard while recording
+            if (saveButton) {
+                saveButton.classList.add('hidden');
+                saveButton.disabled = true;
             }
-            if (recordHumanBtn) {
-                recordHumanBtn.classList.remove('hidden');
-                recordHumanBtn.disabled = false;
+            if (discardButton) {
+                discardButton.classList.add('hidden');
+                discardButton.disabled = true;
             }
-            if (recordAIBtn) {
-                recordAIBtn.classList.remove('hidden');
-                recordAIBtn.disabled = false;
+            if (playButton) {
+                playButton.classList.add('hidden');
+                playButton.disabled = true;
             }
         }
 
-        async function stopRecording() {
+        function startRecording(type) {
             try {
-                if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-                    throw new Error('No active recording');
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Media devices not supported');
                 }
-                
-                mediaRecorder.stop();
-                mediaRecorder.stream.getTracks().forEach(track => track.stop());
-                isRecording = false;
-                
-                // Disable stop button while processing
-                if (stopRecordingBtn) {
-                    stopRecordingBtn.disabled = true;
-                }
-                
+
+                recordingType = type;
+                audioChunks = []; // Clear any previous recording
+                currentAudio = null; // Clear any previous audio
+
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        mediaRecorder = new MediaRecorder(stream);
+                        
+                        mediaRecorder.ondataavailable = (event) => {
+                            if (event.data.size > 0) {
+                                audioChunks.push(event.data);
+                            }
+                        };
+
+                        mediaRecorder.onstop = () => {
+                            const blob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
+                            currentAudio = blob; // Store the blob for later use
+                            handleRecordingComplete(blob);
+                        };
+
+                        // Start recording
+                        mediaRecorder.start();
+                        isRecording = true;
+                        updateRecordingUI();
+                        updateStatus('Recording... Speak clearly into your microphone');
+                        
+                        // Initialize audio context for visualization
+                        initAudioContext(stream);
+                    })
+                    .catch(error => {
+                        console.error('Error accessing microphone:', error);
+                        updateStatus(`Error: ${error.message}`, true);
+                        resetRecordingUI();
+                    });
             } catch (error) {
-                console.error('Error stopping recording:', error);
+                console.error('Error starting recording:', error);
                 updateStatus(`Error: ${error.message}`, true);
                 resetRecordingUI();
+            }
+        }
+
+        async function handleRecordingComplete(blob) {
+            try {
+                // Process the recording to check for wake word
+                const formData = new FormData();
+                formData.append('audio', blob);
+                formData.append('type', recordingType);
+                formData.append('check_only', 'true');
+
+                const response = await fetch('/api/process_sample', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to process recording');
+                }
+
+                const data = await response.json();
+                
+                // Update status based on wake word detection
+                if (data.metrics && data.metrics.wake_word) {
+                    updateStatus('Wake word detected! Recording ready to save.');
+                } else {
+                    updateStatus('Wake word not detected. You may want to try recording again.', true);
+                }
+
+                // Show and enable play/save/discard buttons
+                if (playButton) {
+                    playButton.classList.remove('hidden');
+                    playButton.disabled = false;
+                }
+                if (saveButton) {
+                    saveButton.classList.remove('hidden');
+                    saveButton.disabled = false;
+                }
+                if (discardButton) {
+                    discardButton.classList.remove('hidden');
+                    discardButton.disabled = false;
+                }
+
+                // Re-enable recording buttons
+                if (recordHumanBtn) {
+                    recordHumanBtn.classList.remove('hidden');
+                    recordHumanBtn.disabled = false;
+                }
+                if (recordAIBtn) {
+                    recordAIBtn.classList.remove('hidden');
+                    recordAIBtn.disabled = false;
+                }
+
+                // Update metrics display if available
+                if (data.metrics) {
+                    updateMetricsDisplay(data.metrics);
+                }
+            } catch (error) {
+                console.error('Error processing recording:', error);
+                updateStatus(`Error: ${error.message}`, true);
             }
         }
 
@@ -1298,23 +1468,64 @@
                 formData.append('type', recordingType);
                 formData.append('timestamp', new Date().toISOString());
 
-                const response = await fetch('/api/process_sample', {
+                // First check if wake word is detected
+                const checkResponse = await fetch('/api/process_sample', {
                     method: 'POST',
                     body: formData
                 });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                if (!checkResponse.ok) {
+                    const errorData = await checkResponse.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${checkResponse.status}`);
                 }
 
-                const data = await response.json();
+                const checkData = await checkResponse.json();
+                
+                // If wake word is not detected, show warning but allow saving
+                if (!checkData.metrics?.wake_word) {
+                    const shouldSave = confirm('Warning: Wake word not detected. Do you want to save this sample anyway?');
+                    if (!shouldSave) {
+                        updateStatus('Sample not saved - wake word not detected');
+                        addLogEntry('Sample not saved - wake word not detected', false, 'client', 'WARNING');
+                        return;
+                    }
+                }
+
+                // Proceed with saving
+                const saveResponse = await fetch('/api/process_sample', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!saveResponse.ok) {
+                    const errorData = await saveResponse.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${saveResponse.status}`);
+                }
+
+                const data = await saveResponse.json();
                 
                 if (!data.success) {
                     throw new Error(data.error || 'Failed to save sample');
                 }
 
+                // Only disable buttons after successful save
+                if (playButton) playButton.classList.add('hidden');
+                if (saveButton) {
+                    saveButton.classList.add('hidden');
+                    saveButton.disabled = true;
+                }
+                if (discardButton) {
+                    discardButton.classList.add('hidden');
+                    discardButton.disabled = true;
+                }
+
+                // Update metrics display if available
+                if (data.metrics) {
+                    updateMetricsDisplay(data.metrics);
+                }
+
                 updateStatus('Sample saved successfully');
+                addLogEntry('Sample saved successfully', false, 'client', 'INFO');
 
                 // Update progress counters
                 if (recordingType === 'human') {
@@ -1331,20 +1542,29 @@
                     }
                 }
 
+                // Reset audio state
+                audioChunks = [];
+                currentAudio = null;
+
+                // Immediately reload the samples list
+                await loadSavedSamples();
+
                 // Handle batch mode success
                 if (isBatchMode) {
                     handleBatchSuccess();
-                } else {
-                    resetSampleUI();
                 }
 
-                // Reload the samples list
-                await loadSavedSamples();
                 return data;
                 
             } catch (error) {
                 console.error('Error saving sample:', error);
                 updateStatus(`Error: ${error.message}`, true);
+                addLogEntry(`Error saving sample: ${error.message}`, true, 'client', 'ERROR');
+                
+                // Keep buttons enabled if save fails
+                if (saveButton) saveButton.disabled = false;
+                if (discardButton) discardButton.disabled = false;
+                
                 if (isBatchMode) {
                     handleBatchError();
                 }
@@ -1362,11 +1582,12 @@
                 const data = await response.json();
                 const samples = data.samples || [];
                 
+                const samplesList = document.getElementById('samplesList');
                 if (!samplesList) {
                     throw new Error('Samples list element not found');
                 }
                 
-                recordedSamples = samples;
+                // Clear existing samples
                 samplesList.innerHTML = '';
                 
                 if (samples.length === 0) {
@@ -1374,78 +1595,66 @@
                     return;
                 }
                 
-                samples.forEach(sample => addSampleToList(sample));
+                // Sort samples by timestamp, newest first
+                samples.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                
+                samples.forEach(sample => {
+                    const sampleDiv = document.createElement('div');
+                    sampleDiv.className = 'sample-item';
+                    sampleDiv.innerHTML = `
+                        <div class="sample-header">
+                            <span class="sample-type ${sample.type.toLowerCase()}">${sample.type}</span>
+                            <span class="sample-timestamp">${new Date(sample.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <div class="sample-metrics">
+                            <div class="metric">Volume: ${sample.metrics?.volume_level || 0}%</div>
+                            <div class="metric">SNR: ${sample.metrics?.signal_to_noise || 0}dB</div>
+                            <div class="metric">Clarity: ${sample.metrics?.clarity || 0}%</div>
+                        </div>
+                        <div class="sample-controls">
+                            <button class="play-button" onclick="playSample('${sample.filename}')">Play</button>
+                            <button class="delete-button" onclick="deleteSample('${sample.filename}')">Delete</button>
+                        </div>
+                    `;
+                    samplesList.appendChild(sampleDiv);
+                });
+                
+                // Update counts
+                humanSamplesCount = samples.filter(s => s.type.toLowerCase() === 'human').length;
+                aiSamplesCount = samples.filter(s => s.type.toLowerCase() === 'ai').length;
+                
+                // Update progress bars
+                if (humanProgress && humanProgressBar) {
+                    humanProgress.textContent = `${humanSamplesCount}/5`;
+                    humanProgressBar.style.width = `${(humanSamplesCount / 5) * 100}%`;
+                }
+                if (aiProgress && aiProgressBar) {
+                    aiProgress.textContent = `${aiSamplesCount}/5`;
+                    aiProgressBar.style.width = `${(aiSamplesCount / 5) * 100}%`;
+                }
+                
             } catch (error) {
                 console.error('Error loading samples:', error);
+                addLogEntry(`Error loading samples: ${error.message}`, true, 'client', 'ERROR');
             }
         }
 
-        function addSampleToList(sample) {
-            const template = document.getElementById('sampleItemTemplate');
-            const samplesList = document.getElementById('samplesList');
-            const noSamplesMsg = samplesList.querySelector('.no-samples');
-            
-            if (noSamplesMsg) {
-                noSamplesMsg.remove();
-            }
-
-            const clone = template.content.cloneNode(true);
-            const sampleItem = clone.querySelector('.sample-item');
-            sampleItem.dataset.filename = sample.filename;
-            
-            const typeSpan = sampleItem.querySelector('.sample-type');
-            typeSpan.textContent = sample.type.toUpperCase();
-            typeSpan.classList.add(sample.type.toLowerCase());
-            
-            const timestamp = sampleItem.querySelector('.sample-timestamp');
-            timestamp.textContent = new Date(sample.timestamp).toLocaleTimeString();
-            
-            const duration = sampleItem.querySelector('.sample-duration');
-            duration.textContent = formatDuration(sample.duration || 0);
-            
-            // Update quality indicators
-            const indicators = sampleItem.querySelectorAll('.quality-indicator');
-            updateQualityIndicator(indicators[0], sample.metrics?.volume || 0);
-            updateQualityIndicator(indicators[1], 1 - (sample.metrics?.noise || 0));
-            updateQualityIndicator(indicators[2], sample.metrics?.clarity || 0);
-            updateQualityIndicator(indicators[3], sample.metrics?.wake_word || false, 'boolean');
-            
-            // Draw waveform if data available
-            if (sample.waveform) {
-                const canvas = sampleItem.querySelector('.waveform-canvas');
-                drawWaveform(canvas, sample.waveform);
-            }
-            
-            const playButton = sampleItem.querySelector('.play');
-            playButton.addEventListener('click', () => playSample(sample));
-            
-            const deleteButton = sampleItem.querySelector('.delete');
-            deleteButton.addEventListener('click', () => deleteSample(sample, sampleItem));
-            
-            const checkbox = sampleItem.querySelector('.sample-checkbox');
-            checkbox.addEventListener('change', updateBatchActions);
-            
-            samplesList.appendChild(sampleItem);
-        }
-
-        async function deleteSample(sample, element) {
+        async function deleteSample(filename) {
             try {
-                const response = await fetch(`/api/delete_sample/${sample.filename}`, {
+                const response = await fetch(`/api/delete_sample/${filename}`, {
                     method: 'DELETE'
                 });
 
                 if (!response.ok) throw new Error('Failed to delete sample');
 
-                element.remove();
-                recordedSamples = recordedSamples.filter(s => s.filename !== sample.filename);
-                
-                const samplesList = document.getElementById('samplesList');
-                if (samplesList.children.length === 0) {
-                    samplesList.innerHTML = '<div class="no-samples">No samples recorded yet</div>';
+                // Remove the sample from the UI
+                const sampleItem = document.querySelector(`.sample-item[data-filename="${filename}"]`);
+                if (sampleItem) {
+                    sampleItem.remove();
                 }
 
                 // Update progress if needed
-                if (sample.type.toLowerCase() === 'human') {
+                if (recordingType.toLowerCase() === 'human') {
                     humanSamplesCount = Math.max(0, humanSamplesCount - 1);
                     humanProgress.textContent = `${humanSamplesCount}/5`;
                     humanProgressBar.style.width = `${(humanSamplesCount / 5) * 100}%`;
@@ -1464,18 +1673,71 @@
             if (recordHumanBtn) {
                 recordHumanBtn.textContent = 'Start Human Recording';
                 recordHumanBtn.classList.remove('danger', 'hidden');
+                recordHumanBtn.disabled = false;
             }
             if (recordAIBtn) {
                 recordAIBtn.textContent = 'Start AI Recording';
                 recordAIBtn.classList.remove('danger', 'hidden');
+                recordAIBtn.disabled = false;
             }
-            if (playButton) playButton.classList.add('hidden');
-            if (saveButton) saveButton.classList.add('hidden');
-            if (discardButton) discardButton.classList.add('hidden');
+            if (playButton) {
+                playButton.classList.add('hidden');
+                playButton.disabled = true;
+            }
+            if (saveButton) {
+                saveButton.classList.add('hidden');
+                saveButton.disabled = true;
+            }
+            if (discardButton) {
+                discardButton.classList.add('hidden');
+                discardButton.disabled = true;
+            }
+            
+            currentAudio = null;
+            audioChunks = [];
             
             if (statusElement) {
                 statusElement.textContent = 'Ready to record';
             }
+        }
+
+        function resetRecordingUI() {
+            // Reset recording buttons
+            if (stopRecordingBtn) {
+                stopRecordingBtn.classList.add('hidden');
+                stopRecordingBtn.disabled = true;
+            }
+            if (recordHumanBtn) {
+                recordHumanBtn.classList.remove('hidden');
+                recordHumanBtn.disabled = false;
+            }
+            if (recordAIBtn) {
+                recordAIBtn.classList.remove('hidden');
+                recordAIBtn.disabled = false;
+            }
+            
+            // Reset playback controls
+            if (playButton) {
+                playButton.classList.add('hidden');
+                playButton.disabled = true;
+            }
+            if (saveButton) {
+                saveButton.classList.add('hidden');
+                saveButton.disabled = true;
+            }
+            if (discardButton) {
+                discardButton.classList.add('hidden');
+                discardButton.disabled = true;
+            }
+
+            // Reset status
+            if (statusElement) {
+                statusElement.textContent = 'Ready to record';
+            }
+
+            // Reset audio state
+            audioChunks = [];
+            currentAudio = null;
         }
 
         function discardRecording() {
@@ -1487,13 +1749,12 @@
                     audioContext = null;
                 }
 
-                // Reset audio chunks
+                // Reset audio state
                 audioChunks = [];
                 currentAudio = null;
 
                 // Reset UI
                 resetRecordingUI();
-                resetSampleUI();
 
                 // Update status
                 updateStatus('Recording discarded');
@@ -1503,33 +1764,87 @@
                 console.error('Error discarding recording:', error);
                 updateStatus(`Error discarding recording: ${error.message}`, true);
                 addLogEntry(`Error discarding recording: ${error.message}`, true, 'client', 'ERROR');
+                
+                // Even if there's an error, try to reset the UI
+                resetRecordingUI();
             }
         }
 
         function updateMetricsDisplay(metrics) {
-            const metricsDisplay = document.getElementById('metrics-display');
-            metricsDisplay.classList.remove('hidden');
-            
-            // Update progress bars and values
-            document.getElementById('volume-bar').style.width = `${metrics.volume_level}%`;
-            document.getElementById('volume-value').textContent = `${metrics.volume_level}%`;
-            
-            document.getElementById('snr-bar').style.width = `${metrics.signal_to_noise}%`;
-            document.getElementById('snr-value').textContent = `${metrics.signal_to_noise}%`;
-            
-            document.getElementById('clarity-bar').style.width = `${metrics.clarity}%`;
-            document.getElementById('clarity-value').textContent = `${metrics.clarity}%`;
-            
-            document.getElementById('quality-bar').style.width = `${metrics.quality_score}%`;
-            document.getElementById('quality-value').textContent = `${metrics.quality_score}%`;
-            
-            // Show/hide clipping warning
-            const clippingWarning = document.getElementById('clipping-warning');
-            if (metrics.clipping_percentage > 1) {
-                clippingWarning.classList.remove('hidden');
-                clippingWarning.textContent = `Warning: ${metrics.clipping_percentage}% of audio is clipping`;
-            } else {
-                clippingWarning.classList.add('hidden');
+            try {
+                // Update volume level
+                const volumeLevel = document.getElementById('volumeLevel');
+                if (volumeLevel) {
+                    volumeLevel.textContent = `${metrics.volume_level}%`;
+                    volumeLevel.className = `quality-metric ${getQualityClass(metrics.volume_level, 'volume')}`;
+                }
+
+                // Update noise level (SNR)
+                const noiseLevel = document.getElementById('noiseLevel');
+                if (noiseLevel) {
+                    noiseLevel.textContent = `${metrics.signal_to_noise}dB`;
+                    noiseLevel.className = `quality-metric ${getQualityClass(metrics.signal_to_noise, 'noise')}`;
+                }
+
+                // Update clarity level
+                const clarityLevel = document.getElementById('clarityLevel');
+                if (clarityLevel) {
+                    clarityLevel.textContent = `${metrics.clarity}%`;
+                    clarityLevel.className = `quality-metric ${getQualityClass(metrics.clarity, 'clarity')}`;
+                }
+
+                // Update duration check if available
+                const durationCheck = document.getElementById('durationCheck');
+                if (durationCheck && metrics.duration) {
+                    durationCheck.textContent = `${metrics.duration.toFixed(1)}s`;
+                    durationCheck.className = `quality-metric ${metrics.duration >= 0.5 && metrics.duration <= 15.0 ? 'good' : 'bad'}`;
+                }
+
+                // Update wake word detection status
+                const wakeWordCheck = document.getElementById('wakeWordCheck');
+                if (wakeWordCheck) {
+                    wakeWordCheck.textContent = metrics.wake_word ? 'Detected' : 'Not Detected';
+                    wakeWordCheck.className = `quality-metric ${metrics.wake_word ? 'good' : 'bad'}`;
+                }
+
+                // Update overall quality
+                const overallQuality = document.getElementById('overallQuality');
+                if (overallQuality) {
+                    overallQuality.textContent = `${metrics.quality_score}%`;
+                    overallQuality.className = `quality-metric ${getQualityClass(metrics.quality_score, 'overall')}`;
+                }
+
+                // Add clipping warning if needed
+                if (metrics.clipping_percentage > 1) {
+                    updateStatus(`Warning: ${metrics.clipping_percentage}% of audio is clipping`, true);
+                }
+            } catch (error) {
+                console.error('Error updating metrics display:', error);
+                addLogEntry(`Error updating metrics display: ${error.message}`, true, 'client', 'ERROR');
+            }
+        }
+
+        function getQualityClass(value, type) {
+            switch (type) {
+                case 'volume':
+                    if (value < 3) return 'bad';
+                    if (value < 5) return 'warning';
+                    if (value > 90) return 'warning';
+                    return 'good';
+                case 'noise':
+                    if (value < 5) return 'bad';
+                    if (value > 95) return 'warning';
+                    return 'good';
+                case 'clarity':
+                    if (value < 50) return 'bad';
+                    if (value < 70) return 'warning';
+                    return 'good';
+                case 'overall':
+                    if (value < 60) return 'bad';
+                    if (value < 80) return 'warning';
+                    return 'good';
+                default:
+                    return value > 70 ? 'good' : value > 40 ? 'warning' : 'bad';
             }
         }
 
@@ -1573,52 +1888,109 @@
             }
         }
 
-        function playRecording(audioBlob) {
-            const avatar = document.getElementById('avatar');
-            avatar.classList.add('listening');
-            
-            const audio = new Audio(URL.createObjectURL(audioBlob));
-            audio.onended = () => {
-                avatar.classList.remove('listening');
-            };
-            audio.play();
+        function playRecording() {
+            try {
+                if (!currentAudio) {
+                    throw new Error('No audio available to play');
+                }
+
+                const avatar = document.getElementById('avatar');
+                if (avatar) {
+                    avatar.classList.add('listening');
+                }
+
+                // Create a new audio element
+                const audio = new Audio(URL.createObjectURL(currentAudio));
+                
+                audio.onended = () => {
+                    if (avatar) {
+                        avatar.classList.remove('listening');
+                    }
+                };
+
+                audio.onerror = (error) => {
+                    console.error('Error playing audio:', error);
+                    updateStatus('Error playing audio', true);
+                    if (avatar) {
+                        avatar.classList.remove('listening');
+                    }
+                };
+
+                // Play the audio
+                audio.play().catch(error => {
+                    console.error('Error playing audio:', error);
+                    updateStatus('Error playing audio', true);
+                    if (avatar) {
+                        avatar.classList.remove('listening');
+                    }
+                });
+            } catch (error) {
+                console.error('Error in playRecording:', error);
+                updateStatus(`Error: ${error.message}`, true);
+                const avatar = document.getElementById('avatar');
+                if (avatar) {
+                    avatar.classList.remove('listening');
+                }
+            }
         }
 
-        async function playSample(sample) {
+        async function playSample(filename) {
             try {
-                const response = await fetch(`/api/get_sample/${sample.filename}`);
-                if (!response.ok) throw new Error('Failed to fetch sample');
+                const response = await fetch(`/api/get_sample/${filename}`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch sample');
+                }
                 
                 const blob = await response.blob();
-                playRecording(blob);
+                const audio = new Audio(URL.createObjectURL(blob));
+                
+                // Add event listeners for better feedback
+                audio.onplay = () => {
+                    addLogEntry(`Playing sample: ${filename}`, false, 'client', 'INFO');
+                    const playButton = document.querySelector(`button[onclick="playSample('${filename}')"]`);
+                    if (playButton) playButton.textContent = 'Playing...';
+                };
+                
+                audio.onended = () => {
+                    const playButton = document.querySelector(`button[onclick="playSample('${filename}')"]`);
+                    if (playButton) playButton.textContent = 'Play';
+                };
+                
+                audio.onerror = (e) => {
+                    console.error('Error playing audio:', e);
+                    addLogEntry(`Error playing sample: ${filename}`, true, 'client', 'ERROR');
+                    const playButton = document.querySelector(`button[onclick="playSample('${filename}')"]`);
+                    if (playButton) playButton.textContent = 'Play';
+                };
+                
+                await audio.play();
             } catch (error) {
                 console.error('Error playing sample:', error);
+                addLogEntry(`Error playing sample: ${error.message}`, true, 'client', 'ERROR');
                 updateStatus('Error playing sample', true);
             }
         }
 
         function addLogEntry(message, isError = false, source = 'client', level = 'INFO') {
-            if (!logContainer) return;
-            
+            const logsList = document.getElementById('logsList');
+            if (!logsList) return;
+
             const logEntry = document.createElement('div');
-            logEntry.className = `log-entry ${isError ? 'error' : ''}`;
+            logEntry.className = `log-entry ${isError ? 'error' : ''} ${level.toLowerCase()}`;
             
             const timestamp = new Date().toLocaleTimeString();
-            const sourceClass = source.toLowerCase().replace(/[^a-z0-9]/g, '-');
-            
             logEntry.innerHTML = `
-                <span class="timestamp">[${timestamp}]</span>
-                <span class="source ${sourceClass}">${source}</span>
-                <span class="level ${level.toLowerCase()}">${level}</span>
-                <span class="message">${message}</span>
+                <span class="log-time">[${timestamp}]</span>
+                <span class="log-source">[${source}]</span>
+                <span class="log-level">[${level}]</span>
+                <span class="log-message">${message}</span>
             `;
             
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight;
+            logsList.insertBefore(logEntry, logsList.firstChild);
             
             // Keep only the last 100 log entries
-            while (logContainer.children.length > 100) {
-                logContainer.removeChild(logContainer.firstChild);
+            while (logsList.children.length > 100) {
+                logsList.removeChild(logsList.lastChild);
             }
         }
     </script>

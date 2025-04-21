@@ -61,6 +61,8 @@ app = FastAPI(
     description="API for GoodRobot voice AI assistant",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url=None,  # Disable default docs URL
+    redoc_url=None  # Disable default redoc URL
 )
 
 # Initialize rate limiter
@@ -149,9 +151,13 @@ class RedirectMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RedirectMiddleware)
 
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to GoodRobot API"}
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    """Serve the landing page."""
+    return templates.TemplateResponse(
+        "landing.html",
+        {"request": request}
+    )
 
 
 @app.get("/health")
@@ -663,12 +669,6 @@ async def process_sample(request: Request):
         # Read audio data
         audio_data = await audio_file.read()
         
-        # Convert to numpy array
-        import numpy as np
-        import soundfile as sf
-        import io
-        from scipy import signal
-        
         try:
             # First try reading with soundfile
             audio_array, sample_rate = sf.read(io.BytesIO(audio_data))
@@ -676,10 +676,6 @@ async def process_sample(request: Request):
         except Exception as e:
             logger.warning(f"Failed to read with soundfile: {str(e)}, trying ffmpeg conversion")
             # If soundfile fails, use ffmpeg to convert from webm to wav
-            import subprocess
-            import tempfile
-            
-            # Create temporary files for webm and wav
             with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as webm_file, \
                  tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as wav_file:
                 
@@ -707,22 +703,33 @@ async def process_sample(request: Request):
                     raise
                 finally:
                     # Clean up temp files
-                    import os
-                    os.unlink(webm_file.name)
-                    os.unlink(wav_file.name)
+                    try:
+                        os.unlink(webm_file.name)
+                        os.unlink(wav_file.name)
+                    except Exception as e:
+                        logger.warning(f"Error cleaning up temp files: {str(e)}")
         
         # Convert to mono if stereo
         if len(audio_array.shape) > 1:
             audio_array = np.mean(audio_array, axis=1)
         
+        # Resample to 16kHz if needed
+        if sample_rate != 16000:
+            audio_array = signal.resample(audio_array, int(len(audio_array) * 16000 / sample_rate))
+            sample_rate = 16000
+            logger.info(f"Resampled audio to 16kHz")
+        
+        # Normalize audio to [-1, 1] range
+        audio_array = audio_array / np.max(np.abs(audio_array))
+        
         # Convert to int16 for wake word detector
-        audio_array = (audio_array * 32767).astype(np.int16)
+        audio_array_int16 = (audio_array * 32767).astype(np.int16)
         
         # Calculate audio quality metrics
         metrics = calculate_audio_metrics(audio_array, sample_rate)
         
         # Process with wake word detector
-        detected = wake_word_detector.process_audio_chunk(audio_array)
+        detected = wake_word_detector.process_audio_chunk(audio_array_int16.tobytes())
         metrics['wake_word'] = detected
         
         # Validate sample
@@ -735,7 +742,7 @@ async def process_sample(request: Request):
             os.makedirs(directory, exist_ok=True)
             
             filename = os.path.join(directory, f"jarvis_{sample_type}_{timestamp}.wav")
-            sf.write(filename, audio_array, sample_rate)
+            sf.write(filename, audio_array_int16, sample_rate)
             
             return JSONResponse(
                 status_code=200,
@@ -782,12 +789,25 @@ def calculate_audio_metrics(audio_array: np.ndarray, sample_rate: int) -> Dict:
         rms = np.sqrt(np.mean(np.square(compressed_audio)))
         volume_level = min(100, int(rms * 400))  # Increased multiplier for better sensitivity
         
-        # Calculate signal-to-noise ratio (SNR)
-        # Using a simple method: ratio of mean signal power to bottom 10% of samples
-        signal_power = np.mean(np.square(compressed_audio))
-        noise_threshold = np.percentile(np.abs(compressed_audio), 10)
-        noise_power = np.mean(np.square(compressed_audio[np.abs(compressed_audio) <= noise_threshold]))
-        snr = 10 * np.log10(signal_power / noise_power) if noise_power > 0 else 100
+        # Calculate signal-to-noise ratio (SNR) using a more robust method
+        # Split audio into frames for better noise estimation
+        frame_length = int(sample_rate * 0.02)  # 20ms frames
+        frames = np.array_split(compressed_audio, len(compressed_audio) // frame_length)
+        
+        # Calculate energy of each frame
+        frame_energies = [np.mean(np.square(frame)) for frame in frames]
+        
+        # Find the quietest 20% of frames as noise reference
+        noise_frames = int(len(frames) * 0.2)
+        noise_energy = np.mean(sorted(frame_energies)[:noise_frames])
+        
+        # Calculate signal energy from the loudest 20% of frames
+        signal_frames = int(len(frames) * 0.2)
+        signal_energy = np.mean(sorted(frame_energies)[-signal_frames:])
+        
+        # Calculate SNR with a minimum noise floor
+        noise_floor = 1e-6  # Minimum noise floor to prevent division by zero
+        snr = 10 * np.log10(signal_energy / max(noise_energy, noise_floor))
         
         # Calculate clarity score based on zero-crossings and spectral features
         zero_crossings = np.sum(np.diff(np.signbit(compressed_audio).astype(int)))
@@ -839,20 +859,20 @@ def validate_sample(audio_array: np.ndarray, sample_rate: int, metrics: dict) ->
         result['error'] = f"Invalid duration: {duration:.2f}s (must be between 0.5s and 15.0s)"
         return result
     
-    # Check volume level - lowered from 2 to 1
-    if metrics['volume_level'] < 1:
+    # Check volume level - lowered from 1 to 0.5
+    if metrics['volume_level'] < 0.5:
         result['is_valid'] = False
-        result['error'] = f"Volume too low: {metrics['volume_level']}% (minimum 1%)"
+        result['error'] = f"Volume too low: {metrics['volume_level']}% (minimum 0.5%)"
         return result
     
-    # Check noise level - increased from 85 to 90
-    if metrics['signal_to_noise'] > 90:
+    # Check noise level - increased from 90 to 95 and added minimum threshold
+    if metrics['signal_to_noise'] > 95 or metrics['signal_to_noise'] < 5:
         result['is_valid'] = False
-        result['error'] = f"Too much background noise: SNR {metrics['signal_to_noise']}dB"
+        result['error'] = f"Invalid noise level: SNR {metrics['signal_to_noise']}dB (must be between 5dB and 95dB)"
         return result
     
-    # Check clarity - lowered from 3 to 1
-    if metrics['clarity'] < 1:
+    # Check clarity - lowered from 1 to 0.5
+    if metrics['clarity'] < 0.5:
         result['is_valid'] = False
         result['error'] = f"Audio not clear enough: clarity score {metrics['clarity']}%"
         return result
@@ -1027,6 +1047,34 @@ async def delete_samples(filenames: List[str]):
     except Exception as e:
         logger.error(f"Error deleting samples: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/get_sample/{filename}")
+async def get_sample(filename: str):
+    """Get a specific audio sample file."""
+    try:
+        # Ensure the filename is safe
+        safe_filename = os.path.basename(filename)
+        file_path = os.path.join("tests", "audio_samples", "wake_word", "human", safe_filename)
+        
+        if not os.path.exists(file_path):
+            # Try AI samples directory
+            file_path = os.path.join("tests", "audio_samples", "wake_word", "ai", safe_filename)
+            if not os.path.exists(file_path):
+                raise HTTPException(status_code=404, detail="Sample not found")
+        
+        return FileResponse(
+            file_path,
+            media_type="audio/wav",
+            filename=safe_filename
+        )
+    except Exception as e:
+        logger.error(f"Error getting sample {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/docs", response_class=HTMLResponse)
+async def custom_docs(request: Request):
+    """Serve the custom API documentation page."""
+    return templates.TemplateResponse("docs.html", {"request": request})
 
 if __name__ == "__main__":
     import uvicorn
