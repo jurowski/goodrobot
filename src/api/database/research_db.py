@@ -1,26 +1,46 @@
+"""
+MongoDB configuration and connection management.
+"""
+
 from typing import List, Optional
 from datetime import datetime
-from motor.motor_asyncio import AsyncIOMotorClient
+from ..config.mongodb import get_database, connect_to_mongodb
 from ..models.research import (
     ResearchHypothesis,
     ParticipantData,
     ResearchResult,
     ExperimentStatus
 )
+from ..config.mongodb import COLLECTION_HYPOTHESES
 
 class ResearchDatabase:
-    def __init__(self, client: AsyncIOMotorClient):
-        self.client = client
-        self.db = client.goodrobot
-        self.hypotheses = self.db.research_hypotheses
-        self.participant_data = self.db.participant_data
-        self.results = self.db.research_results
-
+    """Database operations for research-related data."""
+    
+    def __init__(self):
+        """Initialize the database connection."""
+        self.db = None
+        self.hypotheses = None
+        self.participant_data = None
+        self.results = None
+    
+    async def initialize(self):
+        """Initialize the database connection asynchronously."""
+        if self.db is None:
+            await connect_to_mongodb()
+            self.db = get_database()
+            self.hypotheses = self.db[COLLECTION_HYPOTHESES]
+            self.participant_data = self.db.participant_data
+            self.results = self.db.research_results
+    
     async def create_hypothesis(self, hypothesis: ResearchHypothesis) -> str:
+        """Create a new research hypothesis."""
+        await self.initialize()
         result = await self.hypotheses.insert_one(hypothesis.dict())
         return str(result.inserted_id)
 
     async def get_hypothesis(self, hypothesis_id: str) -> Optional[ResearchHypothesis]:
+        """Get a specific research hypothesis."""
+        await self.initialize()
         result = await self.hypotheses.find_one({"id": hypothesis_id})
         return ResearchHypothesis(**result) if result else None
 
@@ -31,6 +51,8 @@ class ResearchDatabase:
         skip: int = 0,
         limit: int = 20
     ) -> List[ResearchHypothesis]:
+        """List research hypotheses with optional filtering."""
+        await self.initialize()
         query = {}
         if status:
             query["status"] = status
@@ -41,6 +63,8 @@ class ResearchDatabase:
         return [ResearchHypothesis(**doc) async for doc in cursor]
 
     async def update_hypothesis(self, hypothesis_id: str, updates: dict) -> bool:
+        """Update a research hypothesis."""
+        await self.initialize()
         result = await self.hypotheses.update_one(
             {"id": hypothesis_id},
             {"$set": updates}
@@ -48,6 +72,8 @@ class ResearchDatabase:
         return result.modified_count > 0
 
     async def add_participant(self, participant_data: ParticipantData) -> str:
+        """Add a participant to an experiment."""
+        await self.initialize()
         # First check if we can add more participants
         hypothesis = await self.get_hypothesis(participant_data.hypothesis_id)
         if not hypothesis or hypothesis.current_participants >= hypothesis.required_participants:
@@ -69,6 +95,8 @@ class ResearchDatabase:
         hypothesis_id: str,
         measurements: dict
     ) -> bool:
+        """Update participant measurement data."""
+        await self.initialize()
         result = await self.participant_data.update_one(
             {
                 "participant_id": participant_id,
@@ -86,6 +114,8 @@ class ResearchDatabase:
         participant_id: str,
         hypothesis_id: str
     ) -> bool:
+        """Mark participant data as complete."""
+        await self.initialize()
         result = await self.participant_data.update_one(
             {
                 "participant_id": participant_id,
@@ -101,6 +131,8 @@ class ResearchDatabase:
         return result.modified_count > 0
 
     async def create_result(self, result: ResearchResult) -> str:
+        """Create a new research result."""
+        await self.initialize()
         # Update hypothesis status
         await self.hypotheses.update_one(
             {"id": result.hypothesis_id},
@@ -117,6 +149,8 @@ class ResearchDatabase:
         reviewer_id: str,
         comments: dict
     ) -> bool:
+        """Update peer review comments for a result."""
+        await self.initialize()
         result = await self.results.update_one(
             {"id": result_id},
             {
@@ -139,6 +173,8 @@ class ResearchDatabase:
         skip: int = 0,
         limit: int = 20
     ) -> List[ResearchHypothesis]:
+        """Search for research hypotheses."""
+        await self.initialize()
         search_query = {
             "$or": [
                 {"title": {"$regex": query, "$options": "i"}},

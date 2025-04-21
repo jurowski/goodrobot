@@ -2,34 +2,35 @@
 MongoDB configuration and connection management.
 """
 
-import os
+import logging
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import ConnectionFailure, OperationFailure
+import os
 from typing import Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
-import logging
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# MongoDB connection settings
+# MongoDB Configuration
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "goodrobot")
-MONGODB_USERNAME = os.getenv("MONGODB_USERNAME")
-MONGODB_PASSWORD = os.getenv("MONGODB_PASSWORD")
 
 # Collection names
 COLLECTION_HYPOTHESES = "research_hypotheses"
 COLLECTION_PARTICIPANTS = "participants"
 COLLECTION_RESULTS = "research_results"
+COLLECTION_SAMPLES = "samples"
+COLLECTION_USERS = "users"
 
-# MongoDB client instance
-client: Optional[AsyncIOMotorClient] = None
-db = None
+# Global database client
+db_client: Optional[AsyncIOMotorClient] = None
 
 class MongoDBConnectionError(Exception):
     """Custom exception for MongoDB connection errors."""
@@ -44,84 +45,84 @@ class MongoDBValidationError(Exception):
     pass
 
 async def connect_to_mongodb():
-    """Initialize MongoDB connection with enhanced error handling."""
-    global client, db
+    """Connect to MongoDB and initialize the database client."""
+    global db_client
+    
     try:
-        # Validate environment variables
-        if not MONGODB_URL:
-            raise MongoDBConnectionError("MONGODB_URL environment variable is not set")
+        # Create connection options
+        connection_options = {
+            "serverSelectionTimeoutMS": 5000,
+            "connectTimeoutMS": 10000,
+            "retryWrites": True
+        }
         
-        # Construct connection string with authentication if credentials are provided
-        if MONGODB_USERNAME and MONGODB_PASSWORD:
-            # Check if it's a MongoDB Atlas URL
-            if "mongodb+srv://" in MONGODB_URL:
-                connection_string = f"mongodb+srv://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@{MONGODB_URL.split('mongodb+srv://')[1]}"
-            else:
-                # For standard MongoDB URLs
-                connection_string = f"mongodb://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@{MONGODB_URL.split('mongodb://')[1]}"
-        else:
-            connection_string = MONGODB_URL
-        
-        logger.info(f"Connecting to MongoDB at {MONGODB_URL}")
-        logger.debug(f"Using connection string: {connection_string}")
-        
-        # Initialize client with connection timeout and retry settings
-        client = AsyncIOMotorClient(
-            connection_string,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=5000,
-            retryWrites=True,
-            retryReads=True
+        # Create a new client and connect to the server
+        db_client = AsyncIOMotorClient(
+            MONGODB_URL,
+            **connection_options
         )
         
-        # Test the connection
-        try:
-            await client.admin.command('ping')
-            logger.info(f"Successfully connected to MongoDB at {MONGODB_URL}")
-        except Exception as e:
-            raise MongoDBConnectionError(f"Failed to ping MongoDB server: {str(e)}")
+        # Verify the connection
+        await db_client.admin.command('ping')
+        logger.info("Successfully connected to MongoDB")
         
-        db = client[MONGODB_DB_NAME]
+        # Get database reference
+        db = db_client[MONGODB_DB_NAME]
         
-        # Create indexes
-        await create_indexes()
+        # Create collections if they don't exist
+        collections = [
+            COLLECTION_HYPOTHESES,
+            COLLECTION_PARTICIPANTS,
+            COLLECTION_RESULTS,
+            COLLECTION_SAMPLES,
+            COLLECTION_USERS
+        ]
         
+        for collection in collections:
+            if collection not in await db.list_collection_names():
+                await db.create_collection(collection)
+                logger.info(f"Created collection: {collection}")
+        
+        return db
+        
+    except ConnectionFailure as e:
+        logger.error(f"Could not connect to MongoDB: {e}")
+        raise MongoDBConnectionError(f"Failed to connect to MongoDB: {str(e)}")
     except Exception as e:
-        logger.error(f"Error connecting to MongoDB: {e}")
+        logger.error(f"An error occurred while connecting to MongoDB: {e}")
         raise MongoDBConnectionError(f"Failed to connect to MongoDB: {str(e)}")
 
 async def create_indexes():
-    """Create necessary indexes for collections with enhanced error handling."""
+    """Create necessary indexes for collections."""
     try:
-        # Indexes for hypotheses collection
-        await db[COLLECTION_HYPOTHESES].create_index("id", unique=True)
-        await db[COLLECTION_HYPOTHESES].create_index("status")
-        await db[COLLECTION_HYPOTHESES].create_index("researcher_id")
-        await db[COLLECTION_HYPOTHESES].create_index("created_at")
-        await db[COLLECTION_HYPOTHESES].create_index("tags")
-        await db[COLLECTION_HYPOTHESES].create_index([("title", "text"), ("description", "text")])
+        if not db_client:
+            raise MongoDBConnectionError("Database client not initialized")
+            
+        db = db_client[MONGODB_DB_NAME]
         
-        # Indexes for participants collection
-        await db[COLLECTION_PARTICIPANTS].create_index("participant_id", unique=True)
-        await db[COLLECTION_PARTICIPANTS].create_index("hypothesis_id")
-        await db[COLLECTION_PARTICIPANTS].create_index("status")
-        await db[COLLECTION_PARTICIPANTS].create_index("group")
-        await db[COLLECTION_PARTICIPANTS].create_index("start_date")
-        await db[COLLECTION_PARTICIPANTS].create_index("end_date")
-        await db[COLLECTION_PARTICIPANTS].create_index([("hypothesis_id", 1), ("status", 1)])
-        await db[COLLECTION_PARTICIPANTS].create_index([("hypothesis_id", 1), ("group", 1)])
+        # Define indexes
+        indexes = {
+            COLLECTION_HYPOTHESES: [("created_at", 1)],
+            COLLECTION_SAMPLES: [("created_at", 1)],
+            COLLECTION_USERS: [("username", 1)]
+        }
         
-        # Indexes for results collection
-        await db[COLLECTION_RESULTS].create_index("id", unique=True)
-        await db[COLLECTION_RESULTS].create_index("hypothesis_id")
-        await db[COLLECTION_RESULTS].create_index("peer_review_status")
-        await db[COLLECTION_RESULTS].create_index("completion_date")
-        await db[COLLECTION_RESULTS].create_index([("hypothesis_id", 1), ("peer_review_status", 1)])
+        # Create indexes with error handling for each collection
+        for collection, index_list in indexes.items():
+            try:
+                await db[collection].create_index(index_list)
+                logger.info(f"Created index for collection {collection}")
+            except OperationFailure as e:
+                logger.warning(f"Failed to create index for collection {collection}: {e}")
+                continue
+            except Exception as e:
+                logger.warning(f"Unexpected error creating index for collection {collection}: {e}")
+                continue
         
-        logger.info("MongoDB indexes created successfully")
+        logger.info("MongoDB indexes creation completed")
     except Exception as e:
-        logger.error(f"Error creating indexes: {e}")
-        raise MongoDBIndexError(f"Failed to create MongoDB indexes: {str(e)}")
+        logger.warning(f"Error during index creation: {e}")
+        pass
 
 async def validate_document(collection: str, document: dict) -> bool:
     """Validate a document before insertion."""
@@ -153,18 +154,36 @@ async def validate_document(collection: str, document: dict) -> bool:
         raise MongoDBValidationError(f"Document validation failed: {str(e)}")
 
 async def close_mongodb_connection():
-    """Close MongoDB connection with error handling."""
-    global client
-    try:
-        if client:
-            client.close()
+    """Close the MongoDB connection."""
+    global db_client
+    
+    if db_client is not None:
+        try:
+            db_client.close()
             logger.info("MongoDB connection closed successfully")
-    except Exception as e:
-        logger.error(f"Error closing MongoDB connection: {e}")
-        raise MongoDBConnectionError(f"Failed to close MongoDB connection: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error closing MongoDB connection: {e}")
+        finally:
+            db_client = None
 
-def get_db():
-    """Get database instance with validation."""
-    if db is None:
+def get_database():
+    """Get the database instance."""
+    global db_client
+    if db_client is None:
         raise MongoDBConnectionError("Database not initialized. Call connect_to_mongodb() first.")
-    return db 
+    return db_client[MONGODB_DB_NAME]
+
+__all__ = [
+    'connect_to_mongodb',
+    'get_database',
+    'close_mongodb_connection',
+    'validate_document',
+    'MongoDBConnectionError',
+    'MongoDBIndexError',
+    'MongoDBValidationError',
+    'COLLECTION_HYPOTHESES',
+    'COLLECTION_PARTICIPANTS',
+    'COLLECTION_RESULTS',
+    'COLLECTION_SAMPLES',
+    'COLLECTION_USERS'
+] 

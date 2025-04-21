@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional
 from ..models.research import (
     ResearchHypothesis,
@@ -7,26 +7,31 @@ from ..models.research import (
     ExperimentStatus
 )
 from ..database.research_db import ResearchDatabase
-from ..dependencies import get_current_user, get_research_db
+from ..dependencies import get_research_db
 
 router = APIRouter(prefix="/research", tags=["research"])
+
+# Initialize database
+db = ResearchDatabase()
 
 @router.post("/hypotheses", response_model=str)
 async def create_hypothesis(
     hypothesis: ResearchHypothesis,
-    current_user: dict = Depends(get_current_user),
     db: ResearchDatabase = Depends(get_research_db)
 ):
     """Create a new research hypothesis."""
-    hypothesis.researcher_id = current_user["id"]
-    return await db.create_hypothesis(hypothesis)
+    try:
+        hypothesis_id = await db.create_hypothesis(hypothesis)
+        return hypothesis_id
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/hypotheses/{hypothesis_id}", response_model=ResearchHypothesis)
 async def get_hypothesis(
     hypothesis_id: str,
     db: ResearchDatabase = Depends(get_research_db)
 ):
-    """Get a specific research hypothesis by ID."""
+    """Get a specific research hypothesis."""
     hypothesis = await db.get_hypothesis(hypothesis_id)
     if not hypothesis:
         raise HTTPException(status_code=404, detail="Hypothesis not found")
@@ -41,12 +46,15 @@ async def list_hypotheses(
     db: ResearchDatabase = Depends(get_research_db)
 ):
     """List research hypotheses with optional filtering."""
-    return await db.list_hypotheses(status, tags, skip, limit)
+    try:
+        return await db.list_hypotheses(status, tags, skip, limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/hypotheses/{hypothesis_id}/participate", response_model=str)
 async def join_experiment(
     hypothesis_id: str,
-    current_user: dict = Depends(get_current_user),
+    participant_id: str,
     db: ResearchDatabase = Depends(get_research_db)
 ):
     """Join an experiment as a participant."""
@@ -59,7 +67,7 @@ async def join_experiment(
     
     participant_data = ParticipantData(
         hypothesis_id=hypothesis_id,
-        participant_id=current_user["id"],
+        participant_id=participant_id,
         group="pending"  # Will be assigned to control or experimental
     )
     
@@ -71,13 +79,13 @@ async def join_experiment(
 @router.post("/data/{hypothesis_id}", response_model=bool)
 async def submit_measurement(
     hypothesis_id: str,
+    participant_id: str,
     measurements: dict,
-    current_user: dict = Depends(get_current_user),
     db: ResearchDatabase = Depends(get_research_db)
 ):
     """Submit measurement data for an experiment."""
     return await db.update_participant_data(
-        current_user["id"],
+        participant_id,
         hypothesis_id,
         measurements
     )
@@ -85,12 +93,12 @@ async def submit_measurement(
 @router.post("/hypotheses/{hypothesis_id}/complete", response_model=bool)
 async def complete_participation(
     hypothesis_id: str,
-    current_user: dict = Depends(get_current_user),
+    participant_id: str,
     db: ResearchDatabase = Depends(get_research_db)
 ):
     """Mark participation in an experiment as complete."""
     return await db.complete_participant_data(
-        current_user["id"],
+        participant_id,
         hypothesis_id
     )
 
@@ -98,7 +106,7 @@ async def complete_participation(
 async def submit_results(
     hypothesis_id: str,
     result: ResearchResult,
-    current_user: dict = Depends(get_current_user),
+    researcher_id: str,
     db: ResearchDatabase = Depends(get_research_db)
 ):
     """Submit results for a completed experiment."""
@@ -106,7 +114,7 @@ async def submit_results(
     if not hypothesis:
         raise HTTPException(status_code=404, detail="Hypothesis not found")
     
-    if hypothesis.researcher_id != current_user["id"]:
+    if hypothesis.researcher_id != researcher_id:
         raise HTTPException(status_code=403, detail="Not authorized to submit results")
     
     if hypothesis.status != ExperimentStatus.IN_PROGRESS:
@@ -117,14 +125,14 @@ async def submit_results(
 @router.post("/results/{result_id}/review", response_model=bool)
 async def submit_peer_review(
     result_id: str,
+    reviewer_id: str,
     comments: dict,
-    current_user: dict = Depends(get_current_user),
     db: ResearchDatabase = Depends(get_research_db)
 ):
     """Submit a peer review for experiment results."""
     return await db.update_peer_review(
         result_id,
-        current_user["id"],
+        reviewer_id,
         comments
     )
 
@@ -138,4 +146,16 @@ async def search_hypotheses(
     db: ResearchDatabase = Depends(get_research_db)
 ):
     """Search for research hypotheses."""
-    return await db.search_hypotheses(query, status, tags, skip, limit) 
+    return await db.search_hypotheses(query, status, tags, skip, limit)
+
+@router.patch("/hypotheses/{hypothesis_id}")
+async def update_hypothesis(
+    hypothesis_id: str,
+    updates: dict,
+    db: ResearchDatabase = Depends(get_research_db)
+):
+    """Update a research hypothesis."""
+    success = await db.update_hypothesis(hypothesis_id, updates)
+    if not success:
+        raise HTTPException(status_code=404, detail="Hypothesis not found")
+    return {"status": "success"} 

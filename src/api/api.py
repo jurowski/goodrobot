@@ -14,17 +14,16 @@ import wave
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Set
 
 import numpy as np
 import soundfile as sf
 from scipy import signal
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -32,7 +31,7 @@ from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.websockets import WebSocketDisconnect
 
-from src.api.database.research_db import ResearchDatabase
+from src.api.config.mongodb import connect_to_mongodb, close_mongodb_connection
 from src.api.routes import research
 from src.audio.audio_processor import AudioProcessor
 from src.settings import Settings
@@ -44,41 +43,58 @@ from src.voice_recognition.wake_word import WakeWordDetector
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 # Create FastAPI app
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    app.mongodb_client = AsyncIOMotorClient("mongodb://localhost:27017")
-    app.research_db = ResearchDatabase(app.mongodb_client)
+    try:
+        await connect_to_mongodb()
+        logger.info("Connected to MongoDB")
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}")
+        raise
+    
     yield
+    
     # Shutdown
-    app.mongodb_client.close()
+    try:
+        await close_mongodb_connection()
+        logger.info("Closed MongoDB connection")
+    except Exception as e:
+        logger.error(f"Error closing MongoDB connection: {e}")
 
+app = FastAPI(lifespan=lifespan)
 
-app = FastAPI(
-    title="GoodRobot API",
-    description="API for GoodRobot voice AI assistant",
-    version="0.1.0",
-    lifespan=lifespan,
-    docs_url=None,  # Disable default docs URL
-    redoc_url=None  # Disable default redoc URL
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+# Initialize settings and services
+settings = Settings()
+stt = SpeechToText(settings)
+wake_word_detector = WakeWordDetector(settings)
+
+# Store active connections and memories
+active_connections: Set[WebSocket] = set()
+memories: List[Dict] = []
+
+class Memory(BaseModel):
+    text: str
+    timestamp: str
+    tags: List[str]
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Enhanced CORS configuration
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Include routers
+app.include_router(research.router)
 
 # Get the current directory
 current_dir = Path(__file__).parent
@@ -637,8 +653,6 @@ def ensure_directories():
 # Initialize directories
 ensure_directories()
 
-app.include_router(research.router)
-
 
 @app.get("/research")
 async def research_page(request: Request):
@@ -969,73 +983,87 @@ def generate_waveform_data(audio_array: np.ndarray, num_points: int = 100) -> np
 @app.get("/api/list_samples")
 async def list_samples():
     try:
-        samples_dir = Path("samples")
+        # Update to use the correct samples directory
+        samples_dir = Path("tests/audio_samples/wake_word")
         if not samples_dir.exists():
             return {"samples": []}
         
         samples = []
-        for wav_file in samples_dir.glob("*.wav"):
-            metadata_file = wav_file.with_suffix('.json')
-            
-            if metadata_file.exists():
-                # Load metadata if it exists
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
-                samples.append(metadata)
-            else:
-                # Generate basic metadata if no metadata file exists
-                name_parts = wav_file.stem.split("_")
-                sample_type = name_parts[0]
-                timestamp = "_".join(name_parts[1:])
+        # Check both human and AI directories
+        for sample_type in ["human", "ai"]:
+            type_dir = samples_dir / sample_type
+            if not type_dir.exists():
+                continue
                 
-                # Read audio file for basic metrics
-                with wave.open(str(wav_file), 'rb') as wav:
-                    frames = wav.readframes(wav.getnframes())
-                    audio_array = np.frombuffer(frames, dtype=np.int16)
-                    duration = wav.getnframes() / wav.getframerate()
-                
-                metrics = calculate_audio_metrics(audio_array, wav.getframerate())
-                waveform = generate_waveform_data(audio_array)
-                
-                metadata = {
-                    "filename": wav_file.name,
-                    "type": sample_type,
-                    "timestamp": timestamp,
-                    "duration": duration,
-                    "metrics": metrics,
-                    "waveform": waveform.tolist()
-                }
-                
-                # Save metadata for future use
-                with open(metadata_file, 'w') as f:
-                    json.dump(metadata, f)
-                
-                samples.append(metadata)
+            for wav_file in type_dir.glob("*.wav"):
+                try:
+                    # Get basic file info
+                    name_parts = wav_file.stem.split("_")
+                    # Try different timestamp formats
+                    timestamp = None
+                    try:
+                        # Try YYYYMMDD_HHMMSS format
+                        timestamp = datetime.strptime(name_parts[-1], "%Y%m%d_%H%M%S").isoformat()
+                    except ValueError:
+                        try:
+                            # Try HHMMSS format
+                            timestamp = datetime.strptime(name_parts[-1], "%H%M%S").replace(
+                                year=datetime.now().year,
+                                month=datetime.now().month,
+                                day=datetime.now().day
+                            ).isoformat()
+                        except ValueError:
+                            # If both fail, use file modification time
+                            timestamp = datetime.fromtimestamp(wav_file.stat().st_mtime).isoformat()
+                    
+                    # Read audio file for metrics
+                    with wave.open(str(wav_file), 'rb') as wav:
+                        frames = wav.readframes(wav.getnframes())
+                        audio_array = np.frombuffer(frames, dtype=np.int16)
+                        duration = wav.getnframes() / wav.getframerate()
+                    
+                    metrics = calculate_audio_metrics(audio_array, wav.getframerate())
+                    waveform = generate_waveform_data(audio_array)
+                    
+                    metadata = {
+                        "filename": wav_file.name,
+                        "type": sample_type.upper(),
+                        "timestamp": timestamp,
+                        "duration": duration,
+                        "metrics": metrics,
+                        "waveform": waveform.tolist()
+                    }
+                    
+                    samples.append(metadata)
+                except Exception as e:
+                    logger.error(f"Error processing sample {wav_file}: {str(e)}")
+                    continue
+        
+        # Sort samples by timestamp, newest first
+        samples.sort(key=lambda x: x["timestamp"], reverse=True)
         
         return {"samples": samples}
     except Exception as e:
         logger.error(f"Error listing samples: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 @app.delete("/api/delete_samples")
 async def delete_samples(filenames: List[str]):
     """Delete multiple samples at once."""
     try:
-        samples_dir = Path("samples")
+        samples_dir = Path("tests/audio_samples/wake_word")
         deleted = []
         errors = []
         
         for filename in filenames:
             try:
-                wav_file = samples_dir / filename
-                metadata_file = wav_file.with_suffix('.json')
-                
-                if wav_file.exists():
-                    wav_file.unlink()
-                if metadata_file.exists():
-                    metadata_file.unlink()
-                    
-                deleted.append(filename)
+                # Check both human and AI directories
+                for sample_type in ["human", "ai"]:
+                    wav_file = samples_dir / sample_type / filename
+                    if wav_file.exists():
+                        wav_file.unlink()
+                        deleted.append(filename)
+                        break
             except Exception as e:
                 errors.append({"filename": filename, "error": str(e)})
         
@@ -1054,19 +1082,18 @@ async def get_sample(filename: str):
     try:
         # Ensure the filename is safe
         safe_filename = os.path.basename(filename)
-        file_path = os.path.join("tests", "audio_samples", "wake_word", "human", safe_filename)
         
-        if not os.path.exists(file_path):
-            # Try AI samples directory
-            file_path = os.path.join("tests", "audio_samples", "wake_word", "ai", safe_filename)
-            if not os.path.exists(file_path):
-                raise HTTPException(status_code=404, detail="Sample not found")
+        # Check both human and AI directories
+        for sample_type in ["human", "ai"]:
+            file_path = Path("tests/audio_samples/wake_word") / sample_type / safe_filename
+            if file_path.exists():
+                return FileResponse(
+                    str(file_path),
+                    media_type="audio/wav",
+                    filename=safe_filename
+                )
         
-        return FileResponse(
-            file_path,
-            media_type="audio/wav",
-            filename=safe_filename
-        )
+        raise HTTPException(status_code=404, detail="Sample not found")
     except Exception as e:
         logger.error(f"Error getting sample {filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

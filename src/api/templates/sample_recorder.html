@@ -685,6 +685,119 @@
             flex: 1;
             word-break: break-word;
         }
+
+        .recorded-samples {
+            margin-top: 2rem;
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 1rem;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .sample-row {
+            background: #2a2a2a;
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            font-size: 0.9rem;
+            line-height: 1.2;
+        }
+
+        .sample-row .metrics {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex: 1;
+        }
+
+        .sample-row .metric {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+
+        .sample-row .actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .sample-row button {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.85rem;
+        }
+
+        .sample-type {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            margin-right: 0.5rem;
+        }
+
+        .sample-type.human {
+            background: #2c5282;
+            color: #ebf8ff;
+        }
+
+        .sample-type.ai {
+            background: #2d3748;
+            color: #e2e8f0;
+        }
+
+        .waveform {
+            flex: 1;
+            height: 40px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .recorded-samples::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .recorded-samples::-webkit-scrollbar-track {
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+
+        .recorded-samples::-webkit-scrollbar-thumb {
+            background: #4a4a4a;
+            border-radius: 4px;
+        }
+
+        .recorded-samples::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .section-header {
+            cursor: pointer;
+            padding: 0.5rem;
+            background: #2a2a2a;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .section-content.open {
+            max-height: 800px;
+        }
     </style>
 </head>
 <body>
@@ -870,7 +983,7 @@
                         <span class="toggle-icon">▼</span>
                     </div>
                     <div class="collapsible-content">
-                        <div class="sample-list">
+                        <div class="recorded-samples">
                             <div id="samplesList">
                                 <div class="no-samples">No samples recorded yet</div>
                             </div>
@@ -1572,6 +1685,16 @@
             }
         }
 
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+        }
+
         async function loadSavedSamples() {
             try {
                 const response = await fetch('/api/list_samples');
@@ -1604,7 +1727,7 @@
                     sampleDiv.innerHTML = `
                         <div class="sample-header">
                             <span class="sample-type ${sample.type.toLowerCase()}">${sample.type}</span>
-                            <span class="sample-timestamp">${new Date(sample.timestamp).toLocaleTimeString()}</span>
+                            <span class="sample-timestamp">${formatTimestamp(sample.timestamp)}</span>
                         </div>
                         <div class="sample-metrics">
                             <div class="metric">Volume: ${sample.metrics?.volume_level || 0}%</div>
@@ -1635,7 +1758,7 @@
                 
             } catch (error) {
                 console.error('Error loading samples:', error);
-                addLogEntry(`Error loading samples: ${error.message}`, true, 'client', 'ERROR');
+                updateStatus('Error loading samples', true);
             }
         }
 
