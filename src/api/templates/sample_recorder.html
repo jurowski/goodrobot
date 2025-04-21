@@ -105,21 +105,21 @@
             flex: 1;
             display: grid;
             grid-template-columns: 300px 1fr;
-            gap: 2rem;
-            padding: 2rem;
+            gap: 1rem;
+            padding: 1rem;
             background: rgba(26, 26, 26, 0.75);
             backdrop-filter: blur(10px);
             position: relative;
             z-index: 1;
             height: calc(100vh - 5rem);
             overflow: hidden;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
             min-height: 0;
         }
 
         .column {
             position: relative;
-            padding: 1rem;
+            padding: 0.75rem;
             display: flex;
             flex-direction: column;
             background: rgba(32, 32, 32, 0.95);
@@ -128,6 +128,106 @@
             height: 100%;
             overflow-y: auto;
             min-height: 0;
+        }
+
+        .collapsible {
+            margin-bottom: 0.5rem;
+        }
+
+        .collapsible-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .collapsible-content {
+            padding: 0.5rem;
+            display: none;
+        }
+
+        .collapsible-content.show {
+            display: block;
+        }
+
+        .audio-visualizer {
+            margin: 0 0 10px 0;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            height: 80px;
+        }
+        
+        #audioVisualizer {
+            width: 100%;
+            height: 60px;
+            background: var(--surface-color);
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+
+        .controls-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.5rem;
+            width: 100%;
+        }
+
+        .button {
+            padding: 0.5rem 1rem;
+            height: 2.5rem;
+        }
+
+        .metric-card {
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .quality-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .progress-section {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .progress-bar {
+            height: 3px;
+        }
+
+        .sample-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .sample-item {
+            padding: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .waveform-container {
+            height: 30px;
         }
 
         .recording {
@@ -156,14 +256,6 @@
             color: var(--error-color);
         }
 
-        .metric-card {
-            background-color: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 1rem;
-            margin-bottom: 1rem;
-        }
-
         .logs-container {
             flex: 1;
             overflow-y: auto;
@@ -174,35 +266,6 @@
             flex: 1;
             overflow-y: auto;
             padding-right: 0.5rem;
-        }
-
-        .button {
-            padding: 0.75rem 1.5rem;
-            background: var(--primary-color);
-            border: none;
-            border-radius: 4px;
-            color: white;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-weight: 500;
-            width: 100%;
-            text-align: center;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            height: 2.75rem;
-        }
-
-        .button:hover {
-            background: var(--hover-color);
-            transform: translateY(-1px);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .button:active {
-            transform: translateY(0);
-            box-shadow: none;
         }
 
         .button:disabled {
@@ -237,182 +300,6 @@
             background: #f59e0b;
         }
 
-        .controls-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .controls-section {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .section-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--text-color);
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .section-title::before {
-            content: '';
-            display: block;
-            width: 4px;
-            height: 1.25rem;
-            background: var(--primary-color);
-            border-radius: 2px;
-        }
-
-        .info-text {
-            color: var(--muted-text);
-            font-size: 0.875rem;
-            line-height: 1.5;
-            margin: 1rem 0;
-        }
-
-        .progress-bar {
-            height: 4px;
-            background: var(--background-color);
-            border-radius: 2px;
-            margin: 0.75rem 0;
-            border: 1px solid var(--border-color);
-            overflow: hidden;
-        }
-
-        .progress-bar-fill {
-            height: 100%;
-            width: 0%;
-            background: var(--primary-color);
-            border-radius: 2px;
-            transition: width 0.3s ease;
-        }
-
-        /* Custom scrollbar styling */
-        .column::-webkit-scrollbar,
-        .logs-container::-webkit-scrollbar,
-        .main-content::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .column::-webkit-scrollbar-track,
-        .logs-container::-webkit-scrollbar-track,
-        .main-content::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.1);
-            border-radius: 4px;
-        }
-
-        .column::-webkit-scrollbar-thumb,
-        .logs-container::-webkit-scrollbar-thumb,
-        .main-content::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-        }
-
-        .column::-webkit-scrollbar-thumb:hover,
-        .logs-container::-webkit-scrollbar-thumb:hover,
-        .main-content::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .sample-list {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 8px;
-            padding: 0.5rem;
-            margin-top: 1rem;
-        }
-
-        .sample-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem;
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            margin-bottom: 0.5rem;
-        }
-
-        .sample-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .sample-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .sample-type {
-            font-size: 0.875rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .sample-type.human {
-            color: var(--primary-color);
-            background: rgba(52, 152, 219, 0.1);
-        }
-
-        .sample-type.ai {
-            color: var(--success-color);
-            background: rgba(76, 175, 80, 0.1);
-        }
-
-        .sample-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        .action-button {
-            padding: 0.25rem;
-            border-radius: 4px;
-            background: none;
-            border: none;
-            color: var(--text-color);
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-        }
-
-        .action-button:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateY(-1px);
-        }
-
-        .action-button.delete:hover {
-            background: rgba(255, 87, 87, 0.1);
-            color: var(--error-color);
-        }
-
-        .action-button.play:hover {
-            background: rgba(52, 152, 219, 0.1);
-            color: var(--primary-color);
-        }
-
-        .sample-timestamp {
-            font-size: 0.75rem;
-            color: var(--muted-text);
-        }
-
-        .no-samples {
-            text-align: center;
-            padding: 2rem;
-            color: var(--muted-text);
-            font-style: italic;
-        }
-
         .sample-list-controls {
             display: flex;
             justify-content: space-between;
@@ -445,15 +332,6 @@
         .select-control option {
             background: var(--surface-color);
             color: var(--text-color);
-        }
-
-        .waveform-container {
-            height: 40px;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 4px;
-            overflow: hidden;
-            position: relative;
-            margin: 0.5rem 0;
         }
 
         .waveform-canvas {
@@ -518,6 +396,158 @@
             margin-left: auto;
             padding-left: 1rem;
         }
+
+        .recording-interface {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .volume-indicator {
+            width: 100%;
+            height: 20px;
+            background: var(--surface-color);
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        
+        .volume-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--success-color), #8BC34A);
+            transition: width 0.1s ease;
+        }
+        
+        .volume-label {
+            text-align: center;
+            font-size: 14px;
+            color: var(--text-color);
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            transition: background 0.3s ease;
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .btn:hover:not(:disabled) {
+            background: #45a049;
+        }
+        
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .error {
+            color: #f44336;
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        .avatar-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 40px;
+            height: 40px;
+            transition: transform 0.3s ease;
+        }
+
+        .avatar {
+            width: 100%;
+            height: 100%;
+            background-image: url('/static/images/light-mode-brain-2.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            filter: brightness(0.8);
+        }
+
+        .avatar.listening {
+            transform: rotate(7deg);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .log-entry {
+            padding: 0.5rem;
+            margin-bottom: 0.25rem;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.2);
+            font-family: monospace;
+            font-size: 0.875rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .log-entry.error {
+            background: rgba(255, 0, 0, 0.1);
+            color: #ff6b6b;
+        }
+
+        .log-entry .timestamp {
+            color: var(--muted-text);
+            min-width: 80px;
+        }
+
+        .log-entry .source {
+            color: var(--primary-color);
+            min-width: 100px;
+            text-transform: uppercase;
+        }
+
+        .log-entry .level {
+            min-width: 60px;
+            text-transform: uppercase;
+        }
+
+        .log-entry .level.info {
+            color: #4CAF50;
+        }
+
+        .log-entry .level.warning {
+            color: #FBBF24;
+        }
+
+        .log-entry .level.error {
+            color: #ff6b6b;
+        }
+
+        .log-entry .level.debug {
+            color: var(--muted-text);
+        }
+
+        .log-entry .message {
+            flex: 1;
+            word-break: break-word;
+        }
     </style>
 </head>
 <body>
@@ -538,7 +568,10 @@
     <div class="container">
         <!-- Logs Section - Left Column -->
         <div class="column">
-            <h2 class="text-lg font-semibold mb-3 text-gray-200">Live Logs</h2>
+            <div class="avatar-container">
+                <div class="avatar" id="avatar"></div>
+            </div>
+            <h2 class="text-lg font-semibold mb-2 text-gray-200">Live Logs</h2>
             <div class="logs-container metric-card">
                 <div class="font-mono text-xs">
                     <div id="logContainer" class="space-y-1 text-gray-300"></div>
@@ -549,14 +582,17 @@
         <!-- Main Content - Right Column -->
         <div class="column">
             <div class="main-content">
-                <h1 class="text-2xl font-bold text-center mb-6 text-gray-100">Wake Word Sample Recorder</h1>
+                <h1 class="text-xl font-bold text-center mb-4 text-gray-100">Wake Word Sample Recorder</h1>
                 
-                <!-- Instructions Section -->
-                <div class="mb-6">
-                    <h2 class="section-title">Instructions</h2>
-                    <div class="metric-card">
+                <!-- Instructions Section - Collapsible -->
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        <span class="section-title">Instructions</span>
+                        <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="collapsible-content metric-card">
                         <p class="text-gray-300 mb-2">Recording workflow:</p>
-                        <ol class="list-decimal pl-5 space-y-1 text-gray-300">
+                        <ol class="list-decimal pl-5 space-y-1 text-gray-300 text-sm">
                             <li>Click "Start Human Recording" to begin recording</li>
                             <li>Say the wake word ("jarvis") once clearly</li>
                             <li>Click "Stop Recording" when done</li>
@@ -564,23 +600,36 @@
                             <li>Click "Save Sample" if good, or "Discard Sample" if not</li>
                             <li>Repeat this process until you have 5 good samples</li>
                         </ol>
-                        <p class="text-gray-300 mt-3">For AI samples, follow the same process using "Start AI Recording"</p>
+                        <p class="text-gray-300 mt-2 text-sm">For AI samples, follow the same process using "Start AI Recording"</p>
                     </div>
                 </div>
 
                 <!-- Controls Section -->
                 <div class="controls-section">
                     <h2 class="section-title">Recording Controls</h2>
+                    
+                    <!-- Audio Visualizer -->
+                    <div class="audio-visualizer">
+                        <canvas id="audioVisualizer" width="600" height="60"></canvas>
+                        <div id="volumeIndicator" class="volume-indicator">
+                            <div id="volumeBar" class="volume-bar"></div>
+                        </div>
+                        <div id="volumeLabel" class="volume-label">Volume Level: 0%</div>
+                    </div>
+                    
                     <div class="controls-grid">
-                        <div class="button-group" style="display: flex; gap: 1rem; width: 100%;">
+                        <div class="button-group">
                             <button id="recordHuman" class="button flex-1">
                                 Start Human Recording
                             </button>
-                            <button id="playSample" class="button hidden flex-shrink-0" style="width: auto; padding-left: 2rem; padding-right: 2rem;">
+                            <button id="stopRecording" class="button danger flex-1 hidden">
+                                Stop Recording
+                            </button>
+                            <button id="playSample" class="button hidden flex-shrink-0" style="width: auto; padding-left: 1.5rem; padding-right: 1.5rem;">
                                 ▶ Play
                             </button>
                         </div>
-                        <div class="button-group" style="display: flex; gap: 1rem; width: 100%;">
+                        <div class="button-group">
                             <button id="recordAI" class="button success flex-1">
                                 Start AI Recording
                             </button>
@@ -594,15 +643,11 @@
                             Discard Sample
                         </button>
                     </div>
-                    <div class="info-text">
-                        • The system will automatically check sample quality and wake word detection<br>
-                        • Listen to the sample before saving using the "Play" button
-                    </div>
                 </div>
 
                 <!-- Status and Progress Section -->
                 <div class="controls-section">
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="progress-section">
                         <div>
                             <h2 class="section-title">Current Status</h2>
                             <div id="status" class="metric-card">
@@ -635,205 +680,64 @@
                     </div>
                 </div>
 
-                <!-- Quality Metrics Section -->
-                <div class="mb-6">
-                    <h2 class="text-lg font-semibold mb-3 text-gray-200">Sample Quality Metrics</h2>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="metric-card">
-                            <h3 class="font-medium mb-2 text-gray-300 text-sm">Audio Quality</h3>
-                            <div class="space-y-1 text-sm">
-                                <div class="flex justify-between">
-                                    <span class="text-gray-400">Volume Level:</span>
-                                    <span id="volumeLevel" class="quality-metric">-</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-400">Background Noise:</span>
-                                    <span id="noiseLevel" class="quality-metric">-</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-400">Clarity:</span>
-                                    <span id="clarityLevel" class="quality-metric">-</span>
+                <!-- Quality Metrics Section - Collapsible -->
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        <span class="section-title">Sample Quality Metrics</span>
+                        <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="quality-metrics">
+                            <div class="metric-card">
+                                <h3 class="font-medium mb-2 text-gray-300 text-sm">Audio Quality</h3>
+                                <div class="space-y-1 text-sm">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Volume Level:</span>
+                                        <span id="volumeLevel" class="quality-metric">-</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Background Noise:</span>
+                                        <span id="noiseLevel" class="quality-metric">-</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Clarity:</span>
+                                        <span id="clarityLevel" class="quality-metric">-</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="metric-card">
-                            <h3 class="font-medium mb-2 text-gray-300 text-sm">Validation Rules</h3>
-                            <div class="space-y-1 text-sm">
-                                <div class="flex justify-between">
-                                    <span class="text-gray-400">Duration:</span>
-                                    <span id="durationCheck" class="quality-metric">-</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-400">Wake Word:</span>
-                                    <span id="wakeWordCheck" class="quality-metric">-</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-400">Overall Quality:</span>
-                                    <span id="overallQuality" class="quality-metric">-</span>
+                            <div class="metric-card">
+                                <h3 class="font-medium mb-2 text-gray-300 text-sm">Validation Rules</h3>
+                                <div class="space-y-1 text-sm">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Duration:</span>
+                                        <span id="durationCheck" class="quality-metric">-</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Wake Word:</span>
+                                        <span id="wakeWordCheck" class="quality-metric">-</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-400">Overall Quality:</span>
+                                        <span id="overallQuality" class="quality-metric">-</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Batch Processing Section -->
-                <div class="mb-6">
-                    <h2 class="text-lg font-semibold mb-3 text-gray-200">Batch Processing</h2>
-                    <div class="metric-card">
-                        <div class="text-sm text-gray-300 mb-3">
-                            <p>• Use "Start Batch Recording" to record multiple samples in sequence</p>
-                            <p>• Progress bars show how many samples have been recorded</p>
-                        </div>
-                        <div class="flex items-center space-x-4">
-                            <button id="startBatch" class="button warning">
-                                Start Batch Recording
-                            </button>
-                            <span id="batchStatus" class="text-gray-400 text-sm">Ready for batch recording</span>
-                        </div>
-                        <div class="mt-3">
-                            <div class="flex items-center justify-between mb-1 text-sm">
-                                <span class="text-gray-300">Batch Progress</span>
-                                <span id="batchProgress" class="text-gray-300">0/10</span>
-                            </div>
-                            <div class="progress-bar">
-                                <div id="batchProgressBar" class="progress-bar-fill" style="width: 0%"></div>
-                            </div>
-                        </div>
+                <!-- Recorded Samples Section - Collapsible -->
+                <div class="collapsible">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        <span class="section-title">Recorded Samples</span>
+                        <span class="toggle-icon">▼</span>
                     </div>
-                </div>
-
-                <!-- Recorded Samples Section -->
-                <div class="controls-section">
-                    <h2 class="section-title">Recorded Samples</h2>
-                    
-                    <!-- Sample List Controls -->
-                    <div class="sample-list-controls">
-                        <div class="sort-controls">
-                            <label class="text-sm text-gray-400">Sort by:</label>
-                            <select id="sortBy" class="select-control">
-                                <option value="timestamp-desc">Newest First</option>
-                                <option value="timestamp-asc">Oldest First</option>
-                                <option value="duration-desc">Longest First</option>
-                                <option value="duration-asc">Shortest First</option>
-                                <option value="quality-desc">Highest Quality</option>
-                                <option value="quality-asc">Lowest Quality</option>
-                            </select>
-                        </div>
-                        <div class="filter-controls">
-                            <label class="text-sm text-gray-400">Filter:</label>
-                            <select id="filterType" class="select-control">
-                                <option value="all">All Types</option>
-                                <option value="human">Human Only</option>
-                                <option value="ai">AI Only</option>
-                            </select>
-                            <select id="filterQuality" class="select-control">
-                                <option value="all">All Quality</option>
-                                <option value="good">Good Quality</option>
-                                <option value="warning">Warning Quality</option>
-                                <option value="bad">Bad Quality</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Batch Actions -->
-                    <div class="batch-actions hidden" id="batchActions">
-                        <button class="button danger" onclick="deleteSelectedSamples()">
-                            Delete Selected
-                        </button>
-                        <button class="button" onclick="deselectAllSamples()">
-                            Deselect All
-                        </button>
-                    </div>
-
-                    <div class="sample-list">
-                        <div id="samplesList">
-                            <div class="no-samples">No samples recorded yet</div>
-                        </div>
-                    </div>
-                </div>
-
-                <template id="sampleItemTemplate">
-                    <div class="sample-item">
-                        <div class="sample-info">
-                            <input type="checkbox" class="checkbox-control sample-checkbox" onchange="updateBatchActions()">
-                            <span class="sample-type">Type</span>
-                            <span class="sample-timestamp">Timestamp</span>
-                            <span class="sample-duration">Duration</span>
-                        </div>
-                        <div class="waveform-container">
-                            <canvas class="waveform-canvas"></canvas>
-                        </div>
-                        <div class="quality-indicators">
-                            <div class="quality-indicator" title="Volume Level">
-                                <span class="indicator-icon">🔊</span>
-                                <span class="indicator-value">-</span>
-                            </div>
-                            <div class="quality-indicator" title="Background Noise">
-                                <span class="indicator-icon">🎧</span>
-                                <span class="indicator-value">-</span>
-                            </div>
-                            <div class="quality-indicator" title="Clarity">
-                                <span class="indicator-icon">✨</span>
-                                <span class="indicator-value">-</span>
-                            </div>
-                            <div class="quality-indicator" title="Wake Word Detection">
-                                <span class="indicator-icon">🎯</span>
-                                <span class="indicator-value">-</span>
+                    <div class="collapsible-content">
+                        <div class="sample-list">
+                            <div id="samplesList">
+                                <div class="no-samples">No samples recorded yet</div>
                             </div>
                         </div>
-                        <div class="sample-actions">
-                            <button class="action-button play" title="Play Sample">
-                                ▶
-                            </button>
-                            <button class="action-button delete" title="Delete Sample">
-                                ×
-                            </button>
-                        </div>
-                    </div>
-                </template>
-
-                <div id="metrics-display" class="hidden mt-4 p-4 bg-gray-800 rounded-lg">
-                    <h3 class="text-lg font-semibold text-gray-200 mb-2">Audio Metrics</h3>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-gray-400">Volume Level</label>
-                            <div class="flex items-center">
-                                <div class="w-full bg-gray-700 rounded-full h-2.5">
-                                    <div id="volume-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
-                                </div>
-                                <span id="volume-value" class="ml-2 text-gray-300">0%</span>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="text-gray-400">Signal-to-Noise</label>
-                            <div class="flex items-center">
-                                <div class="w-full bg-gray-700 rounded-full h-2.5">
-                                    <div id="snr-bar" class="bg-green-600 h-2.5 rounded-full" style="width: 0%"></div>
-                                </div>
-                                <span id="snr-value" class="ml-2 text-gray-300">0%</span>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="text-gray-400">Clarity</label>
-                            <div class="flex items-center">
-                                <div class="w-full bg-gray-700 rounded-full h-2.5">
-                                    <div id="clarity-bar" class="bg-yellow-600 h-2.5 rounded-full" style="width: 0%"></div>
-                                </div>
-                                <span id="clarity-value" class="ml-2 text-gray-300">0%</span>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="text-gray-400">Overall Quality</label>
-                            <div class="flex items-center">
-                                <div class="w-full bg-gray-700 rounded-full h-2.5">
-                                    <div id="quality-bar" class="bg-purple-600 h-2.5 rounded-full" style="width: 0%"></div>
-                                </div>
-                                <span id="quality-value" class="ml-2 text-gray-300">0%</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mt-2">
-                        <span id="clipping-warning" class="text-red-500 text-sm hidden">Warning: Audio clipping detected</span>
                     </div>
                 </div>
             </div>
@@ -864,103 +768,365 @@
         let saveButton = null;
         let discardButton = null;
         let startBatchButton = null;
+        let batchStatus = null;
+        let batchProgress = null;
+        let batchProgressBar = null;
+        let humanProgress = null;
+        let humanProgressBar = null;
+        let aiProgress = null;
+        let aiProgressBar = null;
+        let analyser;
+        let visualizerCanvas;
+        let canvasCtx;
+        let animationId;
+        let volumeBar;
+        let volumeLabel;
 
-        const humanProgress = document.getElementById('humanProgress');
-        const aiProgress = document.getElementById('aiProgress');
-        const humanProgressBar = document.getElementById('humanProgressBar');
-        const aiProgressBar = document.getElementById('aiProgressBar');
-        const batchProgress = document.getElementById('batchProgress');
-        const batchProgressBar = document.getElementById('batchProgressBar');
-        const startHumanButton = document.getElementById('recordHuman');
-        const startAIButton = document.getElementById('recordAI');
-        const stopButton = document.getElementById('stopRecording');
-        const batchStatus = document.getElementById('batchStatus');
-
-        // Quality metric elements
-        const volumeLevel = document.getElementById('volumeLevel');
-        const noiseLevel = document.getElementById('noiseLevel');
-        const clarityLevel = document.getElementById('clarityLevel');
-        const durationCheck = document.getElementById('durationCheck');
-        const wakeWordCheck = document.getElementById('wakeWordCheck');
-        const overallQuality = document.getElementById('overallQuality');
-
-        // Add log container reference
-        const logContainer = document.getElementById('logContainer');
-
-        // Initialize UI elements and WebSocket connection
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', () => {
             // Initialize UI elements
-            statusElement = document.getElementById('status');
             recordHumanBtn = document.getElementById('recordHuman');
             recordAIBtn = document.getElementById('recordAI');
-            samplesList = document.getElementById('samplesList');
+            stopRecordingBtn = document.getElementById('stopRecording');
             playButton = document.getElementById('playSample');
             saveButton = document.getElementById('saveSample');
             discardButton = document.getElementById('discardSample');
             startBatchButton = document.getElementById('startBatch');
+            batchStatus = document.getElementById('batchStatus');
+            batchProgress = document.getElementById('batchProgress');
+            batchProgressBar = document.getElementById('batchProgressBar');
+            statusElement = document.getElementById('status');
+            logContainer = document.getElementById('logContainer');
+            samplesList = document.getElementById('samplesList');
+            humanProgress = document.getElementById('humanProgress');
+            humanProgressBar = document.getElementById('humanProgressBar');
+            aiProgress = document.getElementById('aiProgress');
+            aiProgressBar = document.getElementById('aiProgressBar');
 
-            // Initialize WebSocket connection
-            initializeWebSocket();
-            
-            // Load existing samples
-            loadSavedSamples();
-
-            // Add event listeners
+            // Bind event listeners
             if (recordHumanBtn) {
-                recordHumanBtn.addEventListener('click', () => {
-                    if (!isRecording) {
-                        startRecording('human');
-                        recordHumanBtn.textContent = 'Stop Recording';
-                        recordHumanBtn.classList.add('danger');
-                        if (recordAIBtn) recordAIBtn.classList.add('hidden');
-                    } else {
-                        stopRecording();
-                    }
-                });
+                recordHumanBtn.addEventListener('click', () => startRecording('human'));
             }
-
             if (recordAIBtn) {
-                recordAIBtn.addEventListener('click', () => {
-                    if (!isRecording) {
-                        startRecording('ai');
-                        recordAIBtn.textContent = 'Stop Recording';
-                        recordAIBtn.classList.add('danger');
-                        if (recordHumanBtn) recordHumanBtn.classList.add('hidden');
-                    } else {
-                        stopRecording();
-                    }
-                });
+                recordAIBtn.addEventListener('click', () => startRecording('ai'));
             }
-
-            if (playButton) {
-                playButton.addEventListener('click', () => {
-                    if (audioChunks.length > 0) {
-                        const blob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
-                        const url = URL.createObjectURL(blob);
-                        const audio = new Audio(url);
-                        audio.play();
-                        audio.onended = () => URL.revokeObjectURL(url);
-                    }
-                });
+            if (stopRecordingBtn) {
+                stopRecordingBtn.addEventListener('click', stopRecording);
             }
-
-            if (saveButton) {
-                saveButton.addEventListener('click', saveSample);
-            }
-
-            if (discardButton) {
-                discardButton.addEventListener('click', () => {
-                    if (isBatchMode) {
-                        handleBatchError();
-                    }
-                    resetSampleUI();
-                });
-            }
-
             if (startBatchButton) {
                 startBatchButton.addEventListener('click', startBatchMode);
             }
+            if (playButton) {
+                playButton.addEventListener('click', () => {
+                    if (currentAudio) {
+                        playRecording(currentAudio);
+                    }
+                });
+            }
+            if (saveButton) {
+                saveButton.addEventListener('click', saveSample);
+            }
+            if (discardButton) {
+                discardButton.addEventListener('click', discardRecording);
+            }
+
+            // Initialize WebSocket connection
+            initializeWebSocket();
+
+            // Load any existing samples
+            loadSavedSamples();
         });
+
+        // Helper function to safely add event listeners
+        function addSafeEventListener(element, event, handler) {
+            if (element && typeof handler === 'function') {
+                element.addEventListener(event, handler);
+            }
+        }
+
+        // Helper function to safely remove event listeners
+        function removeSafeEventListener(element, event, handler) {
+            if (element && typeof handler === 'function') {
+                element.removeEventListener(event, handler);
+            }
+        }
+
+        async function startRecording(type) {
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Media devices not supported');
+                }
+
+                recordingType = type;
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                await initAudioContext(stream);
+                
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    try {
+                        updateStatus('Processing recording...');
+                        const result = await saveSample();
+                        if (result && result.success) {
+                            updateStatus('Recording saved successfully');
+                        } else {
+                            updateStatus(result.error || 'Failed to save recording', true);
+                        }
+                        
+                        // Clean up audio context
+                        if (audioContext) {
+                            cancelAnimationFrame(animationId);
+                            await audioContext.close();
+                            audioContext = null;
+                        }
+                        
+                        // Reset UI
+                        resetRecordingUI();
+                        
+                    } catch (error) {
+                        console.error('Error processing recording:', error);
+                        updateStatus(`Error: ${error.message}`, true);
+                        resetRecordingUI();
+                    }
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                // Update UI
+                updateRecordingUI();
+                updateStatus('Recording... Speak clearly into your microphone');
+                
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                updateStatus(`Error: ${error.message}`, true);
+                resetRecordingUI();
+                
+                // Clean up on error
+                if (audioContext) {
+                    cancelAnimationFrame(animationId);
+                    await audioContext.close();
+                    audioContext = null;
+                }
+            }
+        }
+
+        function updateRecordingUI() {
+            if (stopRecordingBtn) {
+                stopRecordingBtn.classList.remove('hidden');
+                stopRecordingBtn.disabled = false;
+            }
+            if (recordHumanBtn) {
+                recordHumanBtn.classList.add('hidden');
+                recordHumanBtn.disabled = true;
+            }
+            if (recordAIBtn) {
+                recordAIBtn.classList.add('hidden');
+                recordAIBtn.disabled = true;
+            }
+        }
+
+        function resetRecordingUI() {
+            if (stopRecordingBtn) {
+                stopRecordingBtn.classList.add('hidden');
+                stopRecordingBtn.disabled = true;
+            }
+            if (recordHumanBtn) {
+                recordHumanBtn.classList.remove('hidden');
+                recordHumanBtn.disabled = false;
+            }
+            if (recordAIBtn) {
+                recordAIBtn.classList.remove('hidden');
+                recordAIBtn.disabled = false;
+            }
+        }
+
+        async function stopRecording() {
+            try {
+                if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                    throw new Error('No active recording');
+                }
+                
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
+                
+                // Disable stop button while processing
+                if (stopRecordingBtn) {
+                    stopRecordingBtn.disabled = true;
+                }
+                
+            } catch (error) {
+                console.error('Error stopping recording:', error);
+                updateStatus(`Error: ${error.message}`, true);
+                resetRecordingUI();
+            }
+        }
+
+        function checkVolumeLevel(stream) {
+            return new Promise((resolve, reject) => {
+                const audioContext = new AudioContext();
+                const source = audioContext.createMediaStreamSource(stream);
+                const analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+                source.connect(analyser);
+                
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                let totalVolume = 0;
+                let sampleCount = 0;
+                let startTime = Date.now();
+                
+                function checkVolume() {
+                    analyser.getByteFrequencyData(dataArray);
+                    const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+                    totalVolume += average;
+                    sampleCount++;
+                    
+                    // Update volume display
+                    const volumePercent = Math.min(100, Math.round((average / 255) * 100));
+                    const volumeBar = document.getElementById('volumeBar');
+                    const volumeText = document.getElementById('volumeText');
+                    
+                    if (volumeBar) {
+                        volumeBar.style.width = `${volumePercent}%`;
+                        volumeBar.className = `progress-bar ${volumePercent < 3 ? 'bg-danger' : 'bg-success'}`;
+                    }
+                    
+                    if (volumeText) {
+                        if (volumePercent < 3) {
+                            volumeText.textContent = 'Speak louder!';
+                        } else if (volumePercent < 5) {
+                            volumeText.textContent = 'Good volume, keep going!';
+                        } else {
+                            volumeText.textContent = 'Perfect volume!';
+                        }
+                    }
+                    
+                    if (Date.now() - startTime >= 3000) { // Check for 3 seconds
+                        const avgVolume = totalVolume / sampleCount;
+                        const volumePercent = Math.min(100, Math.round((avgVolume / 255) * 100));
+                        
+                        if (volumePercent < 3) {
+                            resolve({
+                                success: false,
+                                message: 'Microphone volume is too low. Please speak louder.'
+                            });
+                        } else {
+                            resolve({
+                                success: true,
+                                message: 'Volume level is good!',
+                                volume: volumePercent
+                            });
+                        }
+                    } else {
+                        requestAnimationFrame(checkVolume);
+                    }
+                }
+                
+                checkVolume();
+            });
+        }
+
+        async function initAudioContext(stream) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+            
+            analyser.fftSize = 2048;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            visualizerCanvas = document.getElementById('audioVisualizer');
+            canvasCtx = visualizerCanvas.getContext('2d');
+            volumeBar = document.getElementById('volumeBar');
+            volumeLabel = document.getElementById('volumeLabel');
+            
+            function draw() {
+                animationId = requestAnimationFrame(draw);
+                
+                analyser.getByteFrequencyData(dataArray);
+                
+                // Calculate volume level using RMS
+                let sum = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    const amplitude = (dataArray[i] - 128) / 128;
+                    sum += amplitude * amplitude;
+                }
+                const rms = Math.sqrt(sum / bufferLength);
+                const volume = Math.min(100, Math.round(rms * 200)); // Adjusted multiplier for better sensitivity
+                
+                // Update volume indicator
+                volumeBar.style.width = `${volume}%`;
+                volumeLabel.textContent = `Volume Level: ${volume}%`;
+                
+                // Update volume bar color based on level
+                if (volume < 3) {
+                    volumeBar.style.background = 'linear-gradient(90deg, #ff4444, #ff6b6b)'; // Red for too low
+                } else if (volume > 90) {
+                    volumeBar.style.background = 'linear-gradient(90deg, #ff9900, #ffbb33)'; // Orange for too high
+                } else {
+                    volumeBar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)'; // Green for good
+                }
+                
+                // Draw waveform
+                canvasCtx.fillStyle = '#f5f5f5';
+                canvasCtx.fillRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+                canvasCtx.lineWidth = 2;
+                canvasCtx.strokeStyle = volume < 3 ? '#ff4444' : (volume > 90 ? '#ff9900' : '#4CAF50');
+                canvasCtx.beginPath();
+                
+                const sliceWidth = visualizerCanvas.width / bufferLength;
+                let x = 0;
+                
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * visualizerCanvas.height / 2;
+                    
+                    if (i === 0) {
+                        canvasCtx.moveTo(x, y);
+                    } else {
+                        canvasCtx.lineTo(x, y);
+                    }
+                    
+                    x += sliceWidth;
+                }
+                
+                canvasCtx.lineTo(visualizerCanvas.width, visualizerCanvas.height / 2);
+                canvasCtx.stroke();
+                
+                // Add volume threshold indicators
+                const lowThresholdY = visualizerCanvas.height * 0.9; // 10% from bottom
+                const highThresholdY = visualizerCanvas.height * 0.1; // 10% from top
+                
+                // Draw low threshold line
+                canvasCtx.beginPath();
+                canvasCtx.strokeStyle = '#ff4444';
+                canvasCtx.setLineDash([5, 5]);
+                canvasCtx.moveTo(0, lowThresholdY);
+                canvasCtx.lineTo(visualizerCanvas.width, lowThresholdY);
+                canvasCtx.stroke();
+                
+                // Draw high threshold line
+                canvasCtx.beginPath();
+                canvasCtx.strokeStyle = '#ff9900';
+                canvasCtx.moveTo(0, highThresholdY);
+                canvasCtx.lineTo(visualizerCanvas.width, highThresholdY);
+                canvasCtx.stroke();
+                
+                canvasCtx.setLineDash([]);
+            }
+            
+            draw();
+        }
 
         function initializeWebSocket() {
             try {
@@ -972,11 +1138,13 @@
                 socket.onopen = () => {
                     console.log('WebSocket connection established');
                     updateStatus('Connected to server');
+                    addLogEntry('WebSocket connection established', false, 'client', 'INFO');
                 };
                 
                 socket.onclose = () => {
                     console.log('WebSocket connection closed');
                     updateStatus('Disconnected from server');
+                    addLogEntry('WebSocket connection closed', false, 'client', 'INFO');
                     // Attempt to reconnect after 5 seconds
                     setTimeout(initializeWebSocket, 5000);
                 };
@@ -984,19 +1152,26 @@
                 socket.onerror = (error) => {
                     console.error('WebSocket error:', error);
                     updateStatus('Connection error');
+                    addLogEntry(`WebSocket error: ${error.message}`, true, 'client', 'ERROR');
                 };
                 
                 socket.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
-                        handleWebSocketMessage(data);
+                        if (data.type === 'log') {
+                            addLogEntry(data.message, data.level === 'ERROR', data.source, data.level);
+                        } else {
+                            handleWebSocketMessage(data);
+                        }
                     } catch (error) {
                         console.error('Error parsing WebSocket message:', error);
+                        addLogEntry(`Error parsing WebSocket message: ${error.message}`, true, 'client', 'ERROR');
                     }
                 };
             } catch (error) {
                 console.error('Error initializing WebSocket:', error);
                 updateStatus('Failed to connect to server');
+                addLogEntry(`Error initializing WebSocket: ${error.message}`, true, 'client', 'ERROR');
             }
         }
 
@@ -1109,68 +1284,6 @@
             }
 
             resetSampleUI();
-        }
-
-        async function startRecording(type) {
-            try {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    throw new Error('Media devices not supported');
-                }
-
-                recordingType = type;
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
-                
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        audioChunks.push(event.data);
-                    }
-                };
-                
-                mediaRecorder.onstop = async () => {
-                    try {
-                        updateStatus('Processing recording...');
-                        await saveSample();
-                        await loadSavedSamples();
-                        updateStatus('Recording saved successfully');
-                    } catch (error) {
-                        console.error('Error processing recording:', error);
-                        updateStatus(`Error: ${error.message}`, true);
-                    }
-                };
-                
-                mediaRecorder.start();
-                isRecording = true;
-                
-                if (recordHumanBtn) recordHumanBtn.disabled = true;
-                if (recordAIBtn) recordAIBtn.disabled = true;
-                updateStatus('Recording...');
-                
-            } catch (error) {
-                console.error('Error starting recording:', error);
-                updateStatus(`Error: ${error.message}`, true);
-            }
-        }
-
-        async function stopRecording() {
-            try {
-                if (!mediaRecorder) {
-                    throw new Error('No active recording');
-                }
-                
-                mediaRecorder.stop();
-                mediaRecorder.stream.getTracks().forEach(track => track.stop());
-                isRecording = false;
-                
-                if (recordHumanBtn) recordHumanBtn.disabled = false;
-                if (recordAIBtn) recordAIBtn.disabled = false;
-                
-            } catch (error) {
-                console.error('Error stopping recording:', error);
-                updateStatus(`Error: ${error.message}`, true);
-            }
         }
 
         async function saveSample() {
@@ -1365,6 +1478,34 @@
             }
         }
 
+        function discardRecording() {
+            try {
+                // Clean up audio resources
+                if (audioContext) {
+                    cancelAnimationFrame(animationId);
+                    audioContext.close();
+                    audioContext = null;
+                }
+
+                // Reset audio chunks
+                audioChunks = [];
+                currentAudio = null;
+
+                // Reset UI
+                resetRecordingUI();
+                resetSampleUI();
+
+                // Update status
+                updateStatus('Recording discarded');
+                addLogEntry('Recording discarded', false, 'client', 'INFO');
+
+            } catch (error) {
+                console.error('Error discarding recording:', error);
+                updateStatus(`Error discarding recording: ${error.message}`, true);
+                addLogEntry(`Error discarding recording: ${error.message}`, true, 'client', 'ERROR');
+            }
+        }
+
         function updateMetricsDisplay(metrics) {
             const metricsDisplay = document.getElementById('metrics-display');
             metricsDisplay.classList.remove('hidden');
@@ -1415,6 +1556,69 @@
             } catch (error) {
                 console.error('Error saving sample:', error);
                 showMessage('Error saving sample', 'error');
+            }
+        }
+
+        // Add this function to handle collapsible sections
+        function toggleCollapsible(header) {
+            const content = header.nextElementSibling;
+            const icon = header.querySelector('.toggle-icon');
+            
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+                icon.textContent = '▼';
+            } else {
+                content.classList.add('show');
+                icon.textContent = '▲';
+            }
+        }
+
+        function playRecording(audioBlob) {
+            const avatar = document.getElementById('avatar');
+            avatar.classList.add('listening');
+            
+            const audio = new Audio(URL.createObjectURL(audioBlob));
+            audio.onended = () => {
+                avatar.classList.remove('listening');
+            };
+            audio.play();
+        }
+
+        async function playSample(sample) {
+            try {
+                const response = await fetch(`/api/get_sample/${sample.filename}`);
+                if (!response.ok) throw new Error('Failed to fetch sample');
+                
+                const blob = await response.blob();
+                playRecording(blob);
+            } catch (error) {
+                console.error('Error playing sample:', error);
+                updateStatus('Error playing sample', true);
+            }
+        }
+
+        function addLogEntry(message, isError = false, source = 'client', level = 'INFO') {
+            if (!logContainer) return;
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${isError ? 'error' : ''}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const sourceClass = source.toLowerCase().replace(/[^a-z0-9]/g, '-');
+            
+            logEntry.innerHTML = `
+                <span class="timestamp">[${timestamp}]</span>
+                <span class="source ${sourceClass}">${source}</span>
+                <span class="level ${level.toLowerCase()}">${level}</span>
+                <span class="message">${message}</span>
+            `;
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // Keep only the last 100 log entries
+            while (logContainer.children.length > 100) {
+                logContainer.removeChild(logContainer.firstChild);
             }
         }
     </script>

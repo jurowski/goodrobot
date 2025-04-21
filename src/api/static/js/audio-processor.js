@@ -32,6 +32,19 @@ class AudioProcessor extends AudioWorkletProcessor {
         this.SILENCE_THRESHOLD = 0.01;       // Threshold for detecting silence
         this.METRICS_UPDATE_INTERVAL = 100;  // Update metrics every 100ms
 
+        this.audioContext = null;
+        this.analyser = null;
+        this.scriptProcessor = null;
+        this.isProcessing = false;
+        this.volumeThreshold = 0.03; // Lower threshold for volume detection (3%)
+        this.clippingThreshold = 0.95;
+        this.silenceThreshold = 0.02; // Lower silence threshold
+        this.silenceDuration = 1000; // ms
+        this.lastSoundTime = 0;
+        this.onVolumeChange = null;
+        this.onClipping = null;
+        this.onSilence = null;
+
         console.log(`AudioProcessor initialized with input rate ${this.inputSampleRate}Hz, target rate ${this.targetSampleRate}Hz, and buffer size ${this.bufferSize}`);
     }
 
@@ -56,6 +69,11 @@ class AudioProcessor extends AudioWorkletProcessor {
         const signalPower = sumSquares / inputData.length;
         const noisePower = isSilent ? signalPower : Math.pow(10, noiseFloor / 10);
         const snr = signalPower > 0 ? 10 * Math.log10(signalPower / noisePower) : 0;
+
+        // Log metrics if significant changes
+        if (Math.abs(rms - this.metrics.rms) > 0.01 || Math.abs(peak - this.metrics.peak) > 0.01) {
+            console.log(`Audio metrics - RMS: ${rms.toFixed(3)}, Peak: ${peak.toFixed(3)}, SNR: ${snr.toFixed(1)}dB`);
+        }
 
         return {
             rms,
@@ -180,6 +198,50 @@ class AudioProcessor extends AudioWorkletProcessor {
                 timestamp: currentTime
             }
         });
+    }
+
+    processAudio(inputBuffer) {
+        const inputData = inputBuffer.getChannelData(0);
+        const bufferLength = inputData.length;
+        
+        // Calculate RMS volume
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+            sum += inputData[i] * inputData[i];
+        }
+        const rms = Math.sqrt(sum / bufferLength);
+        
+        // Check for clipping
+        let isClipping = false;
+        for (let i = 0; i < bufferLength; i++) {
+            if (Math.abs(inputData[i]) > this.clippingThreshold) {
+                isClipping = true;
+                break;
+            }
+        }
+        
+        // Update last sound time if volume is above threshold
+        if (rms > this.volumeThreshold) {
+            this.lastSoundTime = Date.now();
+        }
+        
+        // Check for silence
+        const currentTime = Date.now();
+        if (currentTime - this.lastSoundTime > this.silenceDuration && rms < this.silenceThreshold) {
+            if (this.onSilence) {
+                this.onSilence();
+            }
+        }
+        
+        // Notify volume change
+        if (this.onVolumeChange) {
+            this.onVolumeChange(rms);
+        }
+        
+        // Notify clipping
+        if (isClipping && this.onClipping) {
+            this.onClipping();
+        }
     }
 }
 

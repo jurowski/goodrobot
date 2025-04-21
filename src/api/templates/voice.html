@@ -72,6 +72,24 @@
             gap: 1rem;
         }
 
+        .pet-video {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .pet-video:hover {
+            transform: scale(1.1);
+        }
+
         .temp-brain-icon {
             width: 40px;
             height: 40px;
@@ -632,7 +650,18 @@
             width: 100%;
             height: 100%;
             object-fit: contain;
-            transition: all 0.3s ease;
+            transition: transform 0.3s ease;
+        }
+
+        .logo.listening {
+            transform: rotate(7deg);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.8; }
+            100% { opacity: 1; }
         }
 
         .shuffle-button {
@@ -1008,6 +1037,143 @@
         .search-input::placeholder {
             color: rgba(255, 255, 255, 0.5);
         }
+
+        .copy-feedback {
+            display: none;  /* Remove the old feedback */
+        }
+
+        .inspiration-jewel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+
+        .inspiration-jewel:hover {
+            transform: scale(1.1);
+        }
+
+        .inspiration-modal {
+            display: none;
+            position: fixed;
+            bottom: 80px;
+            left: 20px;
+            background: rgba(32, 32, 32, 0.95);
+            border: 1px solid var(--primary-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            max-width: 450px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 1001;
+            color: var(--text-color);
+        }
+
+        .data-visualization {
+            margin: 1rem 0;
+            padding: 1rem;
+            background: rgba(52, 152, 219, 0.1);
+            border-radius: 6px;
+            border: 1px solid rgba(52, 152, 219, 0.2);
+        }
+
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            height: 120px;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .bar {
+            flex: 1;
+            background: var(--primary-color);
+            transition: height 0.5s ease;
+            position: relative;
+            border-radius: 4px 4px 0 0;
+            min-width: 60px;
+        }
+
+        .bar-label {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.8em;
+            white-space: nowrap;
+        }
+
+        .bar-value {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.8em;
+            color: var(--primary-color);
+        }
+
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+
+        .tag {
+            background: rgba(52, 152, 219, 0.15);
+            color: var(--primary-color);
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tag:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .action-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--primary-color);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .action-button:hover {
+            background: var(--hover-color);
+            transform: translateY(-1px);
+        }
+
+        .inspiration-modal.show {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .inspiration-content {
+            margin-bottom: 1rem;
+        }
+
+        .inspiration-source {
+            color: var(--primary-color);
+            font-style: italic;
+            font-size: 0.9em;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
@@ -1215,6 +1381,23 @@
         <div class="copy-feedback" id="copyFeedback">Copied to clipboard!</div>
     </div>
 
+    <video class="pet-video" id="petVideo" autoplay loop muted playsinline>
+        <source src="/static/movies/pet-dog-2-small.mp4" type="video/mp4">
+    </video>
+
+    <div class="inspiration-jewel" id="inspirationJewel">
+        <img src="https://hive-qlife.firebaseapp.com/images/giffy/crystal_pink.gif" alt="Inspiration Jewel" style="width: 100%; height: 100%; object-fit: contain;">
+    </div>
+
+    <div class="inspiration-modal" id="inspirationModal">
+        <div class="inspiration-content">
+            <h3>Daily Scientific Insight</h3>
+            <p id="inspirationText"></p>
+            <p class="inspiration-source">Source: <a id="inspirationSource" href="#" target="_blank"></a></p>
+        </div>
+        <button class="button" id="closeInspiration">Close</button>
+    </div>
+
     <script>
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
@@ -1257,7 +1440,7 @@
             '/static/images/light-mode-brain-2.png',
             '/static/images/light-mode-logo-3.png'
         ];
-        let currentFaceIndex = 0;
+        let currentFaceIndex = robotFaces.indexOf('/static/images/hipster-5.png');
 
         let mediaRecorder;
         let audioStream;
@@ -1337,19 +1520,19 @@
 
         // Initialize settings
         document.addEventListener('DOMContentLoaded', () => {
-            const settings = loadSettings();
+            loadSettings();
             
-            // Set initial values
-            sensitivity.value = settings.sensitivity;
-            sensitivityValue.textContent = settings.sensitivity;
+            // Set initial values from DEFAULT_SETTINGS if no saved settings exist
+            sensitivity.value = sensitivity.value || DEFAULT_SETTINGS.sensitivity;
+            sensitivityValue.textContent = sensitivity.value;
             
-            audioGain.value = settings.audioGain;
-            audioGainValue.textContent = settings.audioGain;
+            audioGain.value = audioGain.value || DEFAULT_SETTINGS.audioGain;
+            audioGainValue.textContent = audioGain.value;
             
-            noiseThreshold.value = settings.noiseThreshold;
-            noiseThresholdValue.textContent = settings.noiseThreshold;
+            noiseThreshold.value = noiseThreshold.value || DEFAULT_SETTINGS.noiseThreshold;
+            noiseThresholdValue.textContent = noiseThreshold.value;
             
-            language.value = settings.language;
+            language.value = language.value || DEFAULT_SETTINGS.language;
 
             // Add event listeners for settings changes
             sensitivity.addEventListener('input', () => {
@@ -1537,6 +1720,16 @@
             return 'client_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
         }
 
+        function updateUIState(state) {
+            isListening = state;
+            startButton.style.display = state ? 'none' : 'inline';
+            stopButton.style.display = state ? 'inline' : 'none';
+            stopButton.disabled = !state;
+            startButton.disabled = state;
+            status.textContent = state ? 'Listening...' : 'Not listening';
+            robotFace.classList.toggle('listening', state);
+        }
+
         async function startListening() {
             try {
                 if (isListening) {
@@ -1544,32 +1737,22 @@
                     return;
                 }
 
-                // Get audio stream first
+                // Create audio context first with explicit sample rate
+                audioContext = new AudioContext({
+                    sampleRate: 48000
+                });
+                
+                // Get audio stream with matching sample rate
                 audioStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         echoCancellation: true,
                         noiseSuppression: true,
-                        autoGainControl: true
+                        autoGainControl: true,
+                        sampleRate: {
+                            ideal: audioContext.sampleRate
+                        }
                     }
                 });
-
-                // Get the actual sample rate from the stream
-                const track = audioStream.getAudioTracks()[0];
-                const capabilities = track.getCapabilities();
-                const settings = track.getSettings();
-                const inputSampleRate = settings.sampleRate || capabilities.sampleRate || 48000;
-
-                console.log(`Audio stream settings:`, {
-                    sampleRate: inputSampleRate,
-                    channelCount: settings.channelCount,
-                    echoCancellation: settings.echoCancellation,
-                    noiseSuppression: settings.noiseSuppression,
-                    autoGainControl: settings.autoGainControl
-                });
-
-                // Create audio context with native sample rate
-                audioContext = new AudioContext({ sampleRate: inputSampleRate });
-                console.log(`Audio context created with sample rate: ${audioContext.sampleRate}Hz`);
 
                 // Create and connect nodes
                 source = audioContext.createMediaStreamSource(audioStream);
@@ -1583,11 +1766,11 @@
                 analyser.minDecibels = -100;
                 analyser.maxDecibels = -30;
 
-                // Add audio worklet with proper sample rate conversion
+                // Add audio worklet with proper sample rate
                 await audioContext.audioWorklet.addModule('static/js/audio-processor.js');
                 const processorNode = new AudioWorkletNode(audioContext, 'audio-processor', {
                     processorOptions: {
-                        inputSampleRate: inputSampleRate,
+                        inputSampleRate: audioContext.sampleRate,
                         targetSampleRate: 16000,
                         bufferSize: 512
                     }
@@ -1595,14 +1778,12 @@
 
                 // Set up processor message handler
                 processorNode.port.onmessage = (event) => {
-                    if (event.data.type === 'audio') {
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({
-                                type: 'audio',
-                                data: event.data.data,
-                                metrics: event.data.metrics
-                            }));
-                        }
+                    if (event.data.type === 'audio' && ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'audio',
+                            data: event.data.data,
+                            metrics: event.data.metrics
+                        }));
                     }
                 };
 
@@ -1612,36 +1793,85 @@
                 gainNode.connect(processorNode);
                 processorNode.connect(audioContext.destination);
 
-                console.log('Audio nodes connected:', {
-                    source: source.constructor.name,
-                    gainNode: gainNode.constructor.name,
-                    analyser: analyser.constructor.name,
-                    processorNode: processorNode.constructor.name
-                });
-
                 // Set up WebSocket with retry logic
                 await setupWebSocketWithRetry();
                 
                 // Start visualization
                 visualize();
 
-                // Update UI
-                startButton.style.display = 'none';
-                stopButton.style.display = 'inline';
-                stopButton.disabled = false;
-                isListening = true;
-                status.textContent = 'Listening...';
+                // Update UI state
+                updateUIState(true);
                 
                 console.log('Audio capture started successfully');
                 addLogEntry('Audio capture started', false, 'client', 'INFO');
             } catch (error) {
                 console.error('Error starting audio capture:', error);
-                status.textContent = `Error: ${error.message}`;
                 addLogEntry(`Error starting audio capture: ${error.message}`, true, 'client', 'ERROR');
                 await cleanupAudioResources();
-                startButton.disabled = false;
-                stopButton.disabled = true;
+                updateUIState(false);
             }
+        }
+
+        async function stopListening() {
+            if (!isListening) {
+                console.log('Already stopped listening');
+                return;
+            }
+
+            console.log('Stopping listening...');
+            
+            try {
+                // Send stop command to server if websocket is available
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'command',
+                        command: 'stop'
+                    }));
+                    console.log('Stop command sent to server');
+                }
+            } catch (error) {
+                console.warn('Error sending stop command:', error);
+            }
+
+            // Always cleanup resources regardless of websocket state
+            await cleanupAudioResources();
+            updateUIState(false);
+        }
+
+        async function cleanupAudioResources() {
+            console.log('Cleaning up audio resources...');
+            
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => {
+                    track.stop();
+                    console.log('Stopped audio track:', track.kind);
+                });
+                audioStream = null;
+            }
+
+            if (audioContext && audioContext.state !== 'closed') {
+                try {
+                    await audioContext.close();
+                    console.log('AudioContext closed successfully');
+                } catch (err) {
+                    console.error('Error closing AudioContext:', err);
+                }
+            }
+            audioContext = null;
+            source = null;
+            gainNode = null;
+            analyser = null;
+
+            // Close WebSocket if it exists
+            if (ws) {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.close();
+                }
+                ws = null;
+            }
+
+            isListening = false;
+            console.log('All audio resources cleaned up');
         }
 
         async function setupWebSocketWithRetry(retryCount = 0) {
@@ -1649,6 +1879,10 @@
             const retryDelay = 1000;
 
             try {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.close();
+                }
+
                 const clientId = generateClientId();
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const wsUrl = `${protocol}//${window.location.host}/ws/${clientId}`;
@@ -1658,18 +1892,20 @@
                 ws.onopen = () => {
                     console.log('WebSocket connected');
                     wsConnected = true;
-                    // Send initial configuration with actual sample rates
-                    ws.send(JSON.stringify({
-                        type: 'config',
-                        config: {
-                            inputSampleRate: audioContext ? audioContext.sampleRate : 48000,
-                            targetSampleRate: 16000,
-                            channels: 1,
-                            bufferSize: 512,
-                            sensitivity: parseFloat(sensitivity.value),
-                            noiseThreshold: parseFloat(noiseThreshold.value)
-                        }
-                    }));
+                    // Send initial configuration
+                    if (audioContext) {
+                        ws.send(JSON.stringify({
+                            type: 'config',
+                            config: {
+                                inputSampleRate: audioContext.sampleRate,
+                                targetSampleRate: 16000,
+                                channels: 1,
+                                bufferSize: 512,
+                                sensitivity: parseFloat(sensitivity.value),
+                                noiseThreshold: parseFloat(noiseThreshold.value)
+                            }
+                        }));
+                    }
                 };
                 
                 ws.onclose = async (event) => {
@@ -1701,6 +1937,7 @@
                     await new Promise(resolve => setTimeout(resolve, retryDelay));
                     await setupWebSocketWithRetry(retryCount + 1);
                 } else {
+                    await stopListening();
                     throw error;
                 }
             }
@@ -1743,90 +1980,31 @@
         }
 
         function handleWebSocketMessage(event) {
-            const message = JSON.parse(event.data);
-            console.log('Received WebSocket message:', message);
-
-            switch (message.type) {
-                case 'command_ack':
-                    if (message.command === 'stop' && message.status === 'success') {
-                        console.log('Stop command acknowledged by server');
-                        cleanupAudioResources();
-                    } else if (message.command === 'start' && message.status === 'success') {
-                        console.log('Start command acknowledged by server');
-                        updateUIForListening();
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'transcription') {
+                    const transcriptionText = document.querySelector('.transcription-text');
+                    if (transcriptionText) {
+                        transcriptionText.textContent = data.text;
+                        robotFace.classList.add('listening');
                     }
-                    break;
-                case 'error':
-                    console.error('Server error:', message.error);
-                    displayError(message.error);
-                    cleanupAudioResources();
-                    break;
-                case 'config_ack':
-                    console.log('Configuration acknowledged:', message);
-                    break;
-                case 'calibration_complete':
-                    handleCalibrationComplete(message);
-                    break;
-                case 'wake_word_detected':
-                    console.log('Wake word detected:', message);
-                    addLogEntry('Wake word detected', false, 'server', 'INFO');
-                    break;
-                case 'audio_metrics':
-                    console.log('Audio metrics:', message.metrics);
-                    addLogEntry(`Audio metrics - RMS: ${message.metrics.rms.toFixed(4)}, Peak: ${message.metrics.peak.toFixed(4)}, SNR: ${message.metrics.snr.toFixed(2)}dB`, false, 'server', 'DEBUG');
-                    break;
-                default:
-                    console.log('Unknown message type:', message.type);
-            }
-        }
-
-        function cleanupAudioResources() {
-            if (audioStream) {
-                audioStream.getTracks().forEach(track => {
-                    track.stop();
-                    console.log('Stopped audio track:', track.kind);
-                });
-                audioStream = null;
-            }
-
-            if (audioContext) {
-                if (audioContext.state !== 'closed') {
-                    audioContext.close().then(() => {
-                        console.log('AudioContext closed successfully');
-                    }).catch(err => {
-                        console.error('Error closing AudioContext:', err);
-                    });
+                } else if (data.type === 'response') {
+                    if (response) {
+                        response.textContent = data.text;
+                        robotFace.classList.remove('listening');
+                    }
+                } else if (data.type === 'status') {
+                    updateStatus(data.message);
+                    if (data.message.toLowerCase().includes('listening') || 
+                        data.message.toLowerCase().includes('processing')) {
+                        robotFace.classList.add('listening');
+                    } else {
+                        robotFace.classList.remove('listening');
+                    }
                 }
-                audioContext = null;
-            }
-
-            // Reset UI
-            startButton.disabled = false;
-            stopButton.disabled = true;
-            status.textContent = 'Not listening';
-            isListening = false;
-
-            console.log('All audio resources cleaned up');
-        }
-
-        function stopListening() {
-            if (!isListening) {
-                console.log('Already stopped listening');
-                return;
-            }
-
-            console.log('Stopping listening...');
-            
-            // Send stop command to server first
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'command',
-                    command: 'stop'
-                }));
-                console.log('Stop command sent to server');
-            } else {
-                console.warn('WebSocket not available for stop command, cleaning up locally');
-                cleanupAudioResources();
+            } catch (error) {
+                console.error('Error handling WebSocket message:', error);
+                robotFace.classList.remove('listening');
             }
         }
 
@@ -2016,6 +2194,223 @@
             } catch (error) {
                 console.error('Error copying logs:', error);
                 addLogEntry('Failed to copy logs: ' + error.message, true, 'client', 'ERROR');
+            }
+        });
+
+        // Inspiration data
+        const inspirations = [
+            {
+                text: "Taking a 10-minute walk in nature can significantly improve your mood and reduce stress levels. This phenomenon, known as 'nature therapy' or 'forest bathing', has been shown to lower cortisol levels by up to 16%.",
+                source: "Environmental Health and Preventive Medicine",
+                link: "https://doi.org/10.1007/s12199-009-0086-9",
+                visualization: {
+                    type: "bar",
+                    labels: ["Before", "After 10min Walk"],
+                    values: [100, 84],
+                    metric: "Cortisol Levels",
+                    unit: "%"
+                },
+                tags: ["stress-reduction", "exercise", "nature", "mental-health"],
+                action: "Start a Nature Walk"
+            },
+            {
+                text: "Practicing gratitude for just 5 minutes daily has been linked to a 10% increase in happiness and a 35% reduction in depressive symptoms over 6 months.",
+                source: "Journal of Clinical Psychology",
+                link: "https://doi.org/10.1002/jclp.22015",
+                visualization: {
+                    type: "bar",
+                    labels: ["Before", "After 6 Months"],
+                    values: [100, 65],
+                    metric: "Depressive Symptoms",
+                    unit: "%"
+                },
+                tags: ["mental-health", "happiness", "daily-practice", "mindfulness"],
+                action: "Start Gratitude Journal"
+            },
+            {
+                text: "Regular meditation practice of just 8 minutes per day can physically alter brain structure, improving memory, empathy, and stress management within 8 weeks.",
+                source: "Psychiatry Research: Neuroimaging",
+                link: "https://doi.org/10.1016/j.pscychresns.2010.08.006",
+                visualization: {
+                    type: "bar",
+                    labels: ["Before", "After 8 Weeks"],
+                    values: [100, 127],
+                    metric: "Gray Matter Density",
+                    unit: "%"
+                },
+                tags: ["meditation", "brain-health", "mindfulness", "daily-practice"],
+                action: "Start Meditation"
+            },
+            {
+                text: "Maintaining proper hydration by drinking water regularly throughout the day can improve cognitive performance by up to 14% and boost energy levels significantly.",
+                source: "Frontiers in Human Neuroscience",
+                link: "https://doi.org/10.3389/fnhum.2013.00363",
+                visualization: {
+                    type: "bar",
+                    labels: ["Dehydrated", "Hydrated"],
+                    values: [100, 114],
+                    metric: "Cognitive Performance",
+                    unit: "%"
+                },
+                tags: ["hydration", "cognitive-health", "energy", "daily-habit"],
+                action: "Track Water Intake"
+            }
+        ];
+
+        // Add inspiration functionality
+        const inspirationJewel = document.getElementById('inspirationJewel');
+        const inspirationModal = document.getElementById('inspirationModal');
+        const inspirationText = document.getElementById('inspirationText');
+        const inspirationSource = document.getElementById('inspirationSource');
+        const closeInspiration = document.getElementById('closeInspiration');
+
+        function getRandomInspiration() {
+            const index = Math.floor(Math.random() * inspirations.length);
+            return inspirations[index];
+        }
+
+        function createVisualization(data) {
+            if (data.type === "bar") {
+                const container = document.createElement('div');
+                container.className = 'data-visualization';
+                
+                const title = document.createElement('div');
+                title.textContent = data.metric;
+                title.style.textAlign = 'center';
+                container.appendChild(title);
+
+                const chart = document.createElement('div');
+                chart.className = 'bar-chart';
+
+                data.values.forEach((value, index) => {
+                    const bar = document.createElement('div');
+                    bar.className = 'bar';
+                    bar.style.height = `${value}px`;
+
+                    const label = document.createElement('div');
+                    label.className = 'bar-label';
+                    label.textContent = data.labels[index];
+
+                    const valueLabel = document.createElement('div');
+                    valueLabel.className = 'bar-value';
+                    valueLabel.textContent = `${value}${data.unit}`;
+
+                    bar.appendChild(label);
+                    bar.appendChild(valueLabel);
+                    chart.appendChild(bar);
+                });
+
+                container.appendChild(chart);
+                return container;
+            }
+            return null;
+        }
+
+        function createTags(tags) {
+            const container = document.createElement('div');
+            container.className = 'tags-container';
+            
+            tags.forEach(tag => {
+                const tagElement = document.createElement('span');
+                tagElement.className = 'tag';
+                tagElement.textContent = `#${tag}`;
+                container.appendChild(tagElement);
+            });
+
+            return container;
+        }
+
+        function createActionButton(action) {
+            const button = document.createElement('button');
+            button.className = 'action-button';
+            button.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                ${action}
+            `;
+            return button;
+        }
+
+        inspirationJewel.addEventListener('click', () => {
+            const inspiration = getRandomInspiration();
+            inspirationText.textContent = inspiration.text;
+            inspirationSource.textContent = inspiration.source;
+            inspirationSource.href = inspiration.link;
+
+            // Clear previous content
+            const content = document.querySelector('.inspiration-content');
+            while (content.children.length > 3) {
+                content.removeChild(content.lastChild);
+            }
+
+            // Add visualization if available
+            if (inspiration.visualization) {
+                const viz = createVisualization(inspiration.visualization);
+                if (viz) content.appendChild(viz);
+            }
+
+            // Add tags
+            if (inspiration.tags) {
+                content.appendChild(createTags(inspiration.tags));
+            }
+
+            // Add action button
+            if (inspiration.action) {
+                content.appendChild(createActionButton(inspiration.action));
+            }
+
+            inspirationModal.classList.add('show');
+        });
+
+        closeInspiration.addEventListener('click', () => {
+            inspirationModal.classList.remove('show');
+        });
+
+        // Close modal when clicking outside
+        document.addEventListener('click', (event) => {
+            if (!inspirationModal.contains(event.target) && 
+                !inspirationJewel.contains(event.target) && 
+                inspirationModal.classList.contains('show')) {
+                inspirationModal.classList.remove('show');
+            }
+        });
+
+        // Add click handlers for tags and action buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tag')) {
+                console.log('Tag clicked:', e.target.textContent);
+                // TODO: Implement tag filtering or related content
+            }
+            if (e.target.classList.contains('action-button')) {
+                console.log('Action clicked:', e.target.textContent);
+                // TODO: Implement action flow with AI assistant
+            }
+        });
+
+        // Add pet video interaction
+        const petVideo = document.getElementById('petVideo');
+        const normalVideo = '/static/movies/pet-dog-2-small.mp4';
+        const smileVideo = '/static/movies/pet-dog-2-smile-small.mp4';
+        let isSmiling = false;
+
+        petVideo.addEventListener('click', () => {
+            if (!isSmiling) {
+                isSmiling = true;
+                petVideo.src = smileVideo;
+                petVideo.loop = false; // Disable looping for the smile video
+                petVideo.load();
+                petVideo.play();
+                
+                // When the smile video ends, switch back to normal
+                petVideo.onended = () => {
+                    isSmiling = false;
+                    petVideo.src = normalVideo;
+                    petVideo.loop = true; // Re-enable looping for the normal video
+                    petVideo.load();
+                    petVideo.play();
+                    petVideo.onended = null; // Remove the event listener
+                };
             }
         });
     </script>

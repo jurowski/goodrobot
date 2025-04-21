@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+import asyncio
 
 class StructuredLogger:
     def __init__(self, name: str, log_dir: str = "logs"):
@@ -95,6 +96,74 @@ class WebSocketLogHandler(logging.Handler):
             self.websocket._sync({"type": "websocket.send", "text": json.dumps(log_entry)})
         except Exception:
             self.handleError(record)
+
+class WebSocketHandler(logging.Handler):
+    def __init__(self, websocket):
+        super().__init__()
+        self.websocket = websocket
+        self.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
+    def emit(self, record):
+        try:
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'level': record.levelname,
+                'message': self.format(record),
+                'source': record.name,
+                'type': 'log'
+            }
+            
+            # Use the correct WebSocket send method
+            if hasattr(self.websocket, 'send_text'):
+                asyncio.create_task(self.websocket.send_text(json.dumps(log_entry)))
+            elif hasattr(self.websocket, 'send'):
+                asyncio.create_task(self.websocket.send(json.dumps(log_entry)))
+            else:
+                print(f"Warning: WebSocket has no send method. Log entry: {log_entry}")
+                
+        except Exception as e:
+            print(f"Error sending log to WebSocket: {e}")
+            self.handleError(record)
+
+class Logger:
+    def __init__(self, name, websocket=None):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.DEBUG)  # Set to DEBUG for more detailed logging
+        
+        # Console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.DEBUG)
+        console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        console_handler.setFormatter(console_formatter)
+        self.logger.addHandler(console_handler)
+        
+        # File handler
+        file_handler = logging.FileHandler('app.log')
+        file_handler.setLevel(logging.DEBUG)
+        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        self.logger.addHandler(file_handler)
+        
+        # WebSocket handler if provided
+        if websocket:
+            ws_handler = WebSocketHandler(websocket)
+            ws_handler.setLevel(logging.DEBUG)
+            self.logger.addHandler(ws_handler)
+            
+    def debug(self, message, *args, **kwargs):
+        self.logger.debug(message, *args, **kwargs)
+        
+    def info(self, message, *args, **kwargs):
+        self.logger.info(message, *args, **kwargs)
+        
+    def warning(self, message, *args, **kwargs):
+        self.logger.warning(message, *args, **kwargs)
+        
+    def error(self, message, *args, **kwargs):
+        self.logger.error(message, *args, **kwargs)
+        
+    def critical(self, message, *args, **kwargs):
+        self.logger.critical(message, *args, **kwargs)
 
 # Create logger instances for different components
 api_logger = StructuredLogger("api")

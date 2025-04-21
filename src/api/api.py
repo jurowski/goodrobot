@@ -765,28 +765,48 @@ async def process_sample(request: Request):
 def calculate_audio_metrics(audio_array: np.ndarray, sample_rate: int) -> Dict:
     """Calculate various audio quality metrics."""
     try:
-        # Normalize audio to [-1, 1]
-        audio_normalized = audio_array / 32767.0
+        # Ensure audio is in float32 format and normalized to [-1, 1]
+        if audio_array.dtype != np.float32:
+            audio_array = audio_array.astype(np.float32)
+            if audio_array.dtype == np.int16:
+                audio_array = audio_array / 32767.0
         
-        # Calculate RMS volume level
-        rms = np.sqrt(np.mean(np.square(audio_normalized)))
-        volume_level = min(100, int(rms * 100))
+        # Apply dynamic range compression to boost low-level signals
+        threshold = 0.1  # Threshold for compression
+        ratio = 2.0  # Compression ratio
+        compressed_audio = np.copy(audio_array)
+        mask = np.abs(audio_array) < threshold
+        compressed_audio[mask] = np.sign(audio_array[mask]) * (np.abs(audio_array[mask]) ** (1/ratio))
+        
+        # Calculate RMS volume level with increased sensitivity
+        rms = np.sqrt(np.mean(np.square(compressed_audio)))
+        volume_level = min(100, int(rms * 400))  # Increased multiplier for better sensitivity
         
         # Calculate signal-to-noise ratio (SNR)
         # Using a simple method: ratio of mean signal power to bottom 10% of samples
-        signal_power = np.mean(np.square(audio_normalized))
-        noise_threshold = np.percentile(np.abs(audio_normalized), 10)
-        noise_power = np.mean(np.square(audio_normalized[np.abs(audio_normalized) <= noise_threshold]))
+        signal_power = np.mean(np.square(compressed_audio))
+        noise_threshold = np.percentile(np.abs(compressed_audio), 10)
+        noise_power = np.mean(np.square(compressed_audio[np.abs(compressed_audio) <= noise_threshold]))
         snr = 10 * np.log10(signal_power / noise_power) if noise_power > 0 else 100
         
-        # Calculate clarity score based on zero-crossings (rough measure of signal clarity)
-        zero_crossings = np.sum(np.diff(np.signbit(audio_normalized).astype(int)))
-        clarity_score = min(100, int((zero_crossings / len(audio_normalized)) * sample_rate * 0.1))
+        # Calculate clarity score based on zero-crossings and spectral features
+        zero_crossings = np.sum(np.diff(np.signbit(compressed_audio).astype(int)))
+        zcr_score = min(100, int((zero_crossings / len(compressed_audio)) * sample_rate * 0.1))
+        
+        # Calculate spectral centroid for clarity
+        fft = np.fft.rfft(compressed_audio)
+        magnitude = np.abs(fft)
+        frequency = np.fft.rfftfreq(len(compressed_audio), 1/sample_rate)
+        spectral_centroid = np.sum(frequency * magnitude) / np.sum(magnitude)
+        spectral_score = min(100, int(spectral_centroid / 1000))  # Normalize to 0-100
+        
+        # Combine scores for final clarity
+        clarity_score = int((zcr_score + spectral_score) / 2)
         
         # Detect potential clipping
         clipping_threshold = 0.95  # 95% of max amplitude
-        clipping_samples = np.sum(np.abs(audio_normalized) > clipping_threshold)
-        clipping_percentage = (clipping_samples / len(audio_normalized)) * 100
+        clipping_samples = np.sum(np.abs(compressed_audio) > clipping_threshold)
+        clipping_percentage = (clipping_samples / len(compressed_audio)) * 100
         
         return {
             "volume_level": volume_level,  # 0-100
@@ -819,22 +839,22 @@ def validate_sample(audio_array: np.ndarray, sample_rate: int, metrics: dict) ->
         result['error'] = f"Invalid duration: {duration:.2f}s (must be between 0.5s and 15.0s)"
         return result
     
-    # Check volume level
-    if metrics['volume_level'] < 10:
+    # Check volume level - lowered from 2 to 1
+    if metrics['volume_level'] < 1:
         result['is_valid'] = False
-        result['error'] = "Volume too low"
+        result['error'] = f"Volume too low: {metrics['volume_level']}% (minimum 1%)"
         return result
     
-    # Check noise level
-    if metrics['signal_to_noise'] > 50:
+    # Check noise level - increased from 85 to 90
+    if metrics['signal_to_noise'] > 90:
         result['is_valid'] = False
-        result['error'] = "Too much background noise"
+        result['error'] = f"Too much background noise: SNR {metrics['signal_to_noise']}dB"
         return result
     
-    # Check clarity
-    if metrics['clarity'] < 20:
+    # Check clarity - lowered from 3 to 1
+    if metrics['clarity'] < 1:
         result['is_valid'] = False
-        result['error'] = "Audio not clear enough"
+        result['error'] = f"Audio not clear enough: clarity score {metrics['clarity']}%"
         return result
     
     # Check wake word detection

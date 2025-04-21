@@ -10,6 +10,11 @@ class Settings:
     log_level: str = "INFO"
     database: dict = None
 
+    # Voice recognition settings
+    wake_word: str = "jarvis"
+    sensitivity: float = 0.7
+    picovoice_access_key: str = ""
+
     # Audio settings
     sample_rate: int = 16000
     channels: int = 1
